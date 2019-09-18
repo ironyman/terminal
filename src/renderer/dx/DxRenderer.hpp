@@ -77,6 +77,8 @@ namespace Microsoft::Console::Render
 
         [[nodiscard]] HRESULT PaintCursor(const CursorOptions& options) noexcept override;
 
+        [[nodiscard]] HRESULT PaintTerminalEffects() noexcept override;
+
         [[nodiscard]] HRESULT UpdateDrawingBrushes(COLORREF const colorForeground,
                                                    COLORREF const colorBackground,
                                                    const WORD legacyColorAttribute,
@@ -167,6 +169,10 @@ namespace Microsoft::Console::Render
         ::Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> _d2dBrushForeground;
         ::Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> _d2dBrushBackground;
         ::Microsoft::WRL::ComPtr<IDXGISwapChain1> _dxgiSwapChain;
+
+        // ::Microsoft::WRL::ComPtr<ID3D11Texture2D> _framebufferCapture;
+        ID3D11Texture2D* _framebufferCapture;
+
 
         [[nodiscard]] HRESULT _CreateDeviceResources(const bool createSwapChain) noexcept;
 

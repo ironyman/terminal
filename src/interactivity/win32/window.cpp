@@ -213,21 +213,25 @@ void Window::_UpdateSystemMetrics() const
     DxEngine* pDxEngine = nullptr;
     try
     {
+        __debugbreak();
+        OutputDebugStringA(useDx  ? "stuff one \n" : "stuff off");
+ 
         if (useDx)
         {
-            pDxEngine = new DxEngine();
-            // TODO: MSFT:21255595 make this less gross
-            // Manually set the Dx Engine to Hwnd mode. When we're trying to
-            // determine the initial window size, which happens BEFORE the
-            // window is created, we'll want to make sure the DX engine does
-            // math in the hwnd mode, not the Composition mode.
-            THROW_IF_FAILED(pDxEngine->SetHwnd(0));
-            g.pRender->AddRenderEngine(pDxEngine);
+            //pDxEngine = new DxEngine();
+            //__debugbreak();
+            //// TODO: MSFT:21255595 make this less gross
+            //// Manually set the Dx Engine to Hwnd mode. When we're trying to
+            //// determine the initial window size, which happens BEFORE the
+            //// window is created, we'll want to make sure the DX engine does
+            //// math in the hwnd mode, not the Composition mode.
+            //THROW_IF_FAILED(pDxEngine->SetHwnd(0));
+            //g.pRender->AddRenderEngine(pDxEngine);
         }
         else
         {
-            pGdiEngine = new GdiEngine();
-            g.pRender->AddRenderEngine(pGdiEngine);
+       /*     pGdiEngine = new GdiEngine();
+            g.pRender->AddRenderEngine(pGdiEngine);*/
         }
     }
     catch (...)
