@@ -14,8 +14,15 @@
 
 #include <DirectXMath.h>
 #include <d3dcompiler.h>
+#include <DirectXColors.h>
 
 #pragma comment(lib, "d3dcompiler.lib")
+using namespace DirectX;
+
+struct SimpleVertex
+{
+    XMFLOAT3 Pos;
+};
 
 #pragma hdrstop
 
@@ -25,7 +32,6 @@ static constexpr std::wstring_view FALLBACK_LOCALE = L"en-us";
 
 using namespace Microsoft::Console::Render;
 using namespace Microsoft::Console::Types;
-using namespace DirectX;
 
 // Routine Description:
 // - Constructs a DirectX-based renderer for console text
@@ -118,6 +124,118 @@ DxEngine::~DxEngine()
     return S_OK;
 }
 
+HRESULT DxEngine::_SetupTerminalEffects() noexcept
+{
+    /*
+            D3D11_TEXTURE2D_DESC framebufferCapture = { 0 };
+            framebufferCapture.Width = SwapChainDesc.Width;
+            framebufferCapture.Height = SwapChainDesc.Height;
+            framebufferCapture.MipLevels = 1;
+            framebufferCapture.ArraySize = 1;
+            framebufferCapture.Format = SwapChainDesc.Format;
+            framebufferCapture.SampleDesc.Count = SwapChainDesc.SampleDesc.Count;
+            framebufferCapture.SampleDesc.Quality = SwapChainDesc.SampleDesc.Quality;
+            framebufferCapture.Usage = D3D11_USAGE_DEFAULT;
+            framebufferCapture.CPUAccessFlags = 0;
+            framebufferCapture.MiscFlags = 0;*/
+    D3D11_TEXTURE2D_DESC framebufferCaptureDesc = { 0 };
+    ID3D11Texture2D* pBackBuffer;
+    HRESULT hr = S_OK;
+
+    _dxgiSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+    pBackBuffer->GetDesc(&framebufferCaptureDesc);
+    _d3dDevice->CreateTexture2D(&framebufferCaptureDesc, NULL, &_framebufferCapture);
+
+    hr = _d3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_pRenderTargetView);
+    pBackBuffer->Release();
+    if (FAILED(hr))
+        return hr;
+
+    // Setup the viewport
+    D3D11_VIEWPORT vp;
+    vp.Width = (FLOAT)_displaySizePixels.cx;
+    vp.Height = (FLOAT)_displaySizePixels.cy;
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    vp.TopLeftX = 0;
+    vp.TopLeftY = 0;
+    _d3dDeviceContext->RSSetViewports(1, &vp);
+
+    char vertexShaderString[] =
+        R"(
+float4 main(float4 Pos : POSITION) : SV_POSITION
+{
+return Pos;
+}
+)";
+    char pixelShaderString[] =
+        R"(
+float4 main(float4 Pos : SV_POSITION) : SV_TARGET
+{
+    // return float4(0, 0.5f, 0.5f, 1);
+    return float4( 1.0f, 1.0f, 0.0f, 1.0f );    // Yellow, with Alpha = 1
+
+    // return color;
+}
+)";
+
+    Microsoft::WRL::ComPtr<ID3DBlob> vertexBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+
+    hr = D3DCompile(vertexShaderString, sizeof(vertexShaderString), nullptr, nullptr, nullptr, "main", "vs_4_0", 0, 0, &vertexBlob, &errorBlob);
+
+    hr = _d3dDevice->CreateVertexShader(
+        vertexBlob->GetBufferPointer(),
+        vertexBlob->GetBufferSize(),
+        nullptr,
+        &g_pVertexShader);
+
+    Microsoft::WRL::ComPtr<ID3DBlob> pixelBlob;
+
+    hr = D3DCompile(pixelShaderString, sizeof(pixelShaderString), nullptr, nullptr, nullptr, "main", "ps_4_0", 0, 0, &pixelBlob, &errorBlob);
+    hr = _d3dDevice->CreatePixelShader(
+        pixelBlob->GetBufferPointer(),
+        pixelBlob->GetBufferSize(),
+        nullptr,
+        &g_pPixelShader);
+
+    // Define the input layout
+    D3D11_INPUT_ELEMENT_DESC layout[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    UINT numElements = ARRAYSIZE(layout);
+
+    // Create the input layout
+    hr = _d3dDevice->CreateInputLayout(layout, numElements, vertexBlob->GetBufferPointer(), vertexBlob->GetBufferSize(), &g_pVertexLayout);
+    if (FAILED(hr))
+        return hr;
+
+    // Set the input layout
+    _d3dDeviceContext->IASetInputLayout(g_pVertexLayout);
+
+    // Create vertex buffer
+    SimpleVertex vertices[] = {
+        XMFLOAT3(0.0f, 0.5f, 0.5f),
+        XMFLOAT3(0.5f, -0.5f, 0.5f),
+        XMFLOAT3(-0.5f, -0.5f, 0.5f),
+    };
+    D3D11_BUFFER_DESC bd;
+    ZeroMemory(&bd, sizeof(bd));
+    bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.ByteWidth = sizeof(SimpleVertex) * 3;
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    bd.CPUAccessFlags = 0;
+    D3D11_SUBRESOURCE_DATA InitData;
+    ZeroMemory(&InitData, sizeof(InitData));
+    InitData.pSysMem = vertices;
+    hr = _d3dDevice->CreateBuffer(&bd, &InitData, &g_pVertexBuffer);
+    if (FAILED(hr))
+        return hr;
+
+    // pBackBuffer->Release();
+
+    return hr;
+}
 // Routine Description;
 // - Creates device-specific resources required for drawing
 //   which generally means those that are represented on the GPU and can
@@ -152,7 +270,7 @@ DxEngine::~DxEngine()
 // You can find out how to install it here:
 // https://docs.microsoft.com/en-us/windows/uwp/gaming/use-the-directx-runtime-and-visual-studio-graphics-diagnostic-features
                               // clang-format on
-                              // D3D11_CREATE_DEVICE_DEBUG |
+                              D3D11_CREATE_DEVICE_DEBUG |
                               D3D11_CREATE_DEVICE_SINGLETHREADED;
 
     const std::array<D3D_FEATURE_LEVEL, 5> FeatureLevels{ D3D_FEATURE_LEVEL_11_1,
@@ -256,25 +374,8 @@ DxEngine::~DxEngine()
             default:
                 THROW_HR(E_NOTIMPL);
             }
-/*
-            D3D11_TEXTURE2D_DESC framebufferCapture = { 0 };
-            framebufferCapture.Width = SwapChainDesc.Width;
-            framebufferCapture.Height = SwapChainDesc.Height;
-            framebufferCapture.MipLevels = 1;
-            framebufferCapture.ArraySize = 1;
-            framebufferCapture.Format = SwapChainDesc.Format;
-            framebufferCapture.SampleDesc.Count = SwapChainDesc.SampleDesc.Count;
-            framebufferCapture.SampleDesc.Quality = SwapChainDesc.SampleDesc.Quality;
-            framebufferCapture.Usage = D3D11_USAGE_DEFAULT;
-            framebufferCapture.CPUAccessFlags = 0;
-            framebufferCapture.MiscFlags = 0;*/
-            D3D11_TEXTURE2D_DESC framebufferCaptureDesc = { 0 };
-            ID3D11Texture2D* pBuffer;
 
-            _dxgiSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBuffer);
-            pBuffer->GetDesc(&framebufferCaptureDesc);
-            _d3dDevice->CreateTexture2D(&framebufferCaptureDesc, NULL, &_framebufferCapture);
-            pBuffer->Release();
+            RETURN_IF_FAILED(_SetupTerminalEffects());
         }
         CATCH_RETURN();
 
@@ -1245,13 +1346,34 @@ enum class CursorPaintType
 
     _d3dDeviceContext->CopyResource(_framebufferCapture, pBuffer);
 
+    _d3dDeviceContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
+    
+    // Set vertex buffer
+    UINT stride = sizeof(SimpleVertex);
+    UINT offset = 0;
+    _d3dDeviceContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
+
+    // Set primitive topology
+    _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        // Clear the back buffer
+    // _d3dDeviceContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
+
+    // Render a triangle
+    _d3dDeviceContext->VSSetShader(g_pVertexShader, nullptr, 0);
+    _d3dDeviceContext->PSSetShader(g_pPixelShader, nullptr, 0);
+    _d3dDeviceContext->Draw(3, 0);
+
+    // Present the information rendered to the back buffer to the front buffer (the screen)
+    // _dxgiSwapChain->Present(0, 0);
+
+#if 0
     ID3D11RenderTargetView* m_renderTargetView = nullptr;
 
     result = _d3dDevice->CreateRenderTargetView(pBuffer, NULL, &m_renderTargetView);
 
     // draw to screen
-    XMFLOAT3 QuadVertices[] =
-    {
+    XMFLOAT3 QuadVertices[] = {
         XMFLOAT3(-0.5f, -1.0f, 0.0f),
         XMFLOAT3(-1.0f, 1.0f, 0.0f),
         XMFLOAT3(1.0f, -1.0f, 0.0f),
@@ -1274,11 +1396,13 @@ enum class CursorPaintType
     RtlCopyMemory(ms.pData, QuadVertices, sizeof(QuadVertices)); // copy the data
     _d3dDeviceContext->Unmap(_pVertexBuffer, NULL); // unmap the buffer
 
-
-    WORD indices[] =
-    {
-        0, 1, 2,
-        2, 1, 3,
+    WORD indices[] = {
+        0,
+        1,
+        2,
+        2,
+        1,
+        3,
     };
 
     D3D11_BUFFER_DESC indexDesc = { 0 };
@@ -1295,28 +1419,14 @@ enum class CursorPaintType
     _d3dDevice->CreateBuffer(&indexDesc, &indexData, &_pIndexBuffer);
 
     char vertexShaderString[] =
-R"(
-cbuffer cbParameters : register( b0 ) { 
-    float4x4 worldMatrix;
-// matrix worldMatrix;
-};
-
-struct VOut
+        R"(
+flaot4 main(float4 position : POSITION) : SV_POSITION
 {
-    float4 position : SV_POSITION;
-};
-
-VOut main(float4 position : POSITION)
-{
-    VOut output;
-
-    output.position = mul(position, worldMatrix);
-
-    return output;
+return position;
 }
 )";
     char pixelShaderString[] =
-R"(
+        R"(
 float4 main(float4 position : SV_POSITION) : SV_TARGET
 {
     return float4(0, 0.5f, 0.5f, 1);
@@ -1357,14 +1467,13 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
     // Create the input layout
     result = _d3dDevice->CreateInputLayout(layout, numElements, vertexBlob->GetBufferPointer(), vertexBlob->GetBufferSize(), &vertexLayout);
 
-    
     struct MatrixBufferType
     {
         XMMATRIX worldMatrix;
     };
 
-	ID3D11Buffer* m_matrixBuffer;
-	D3D11_BUFFER_DESC matrixBufferDesc = { 0 };
+    ID3D11Buffer* m_matrixBuffer;
+    D3D11_BUFFER_DESC matrixBufferDesc = { 0 };
     matrixBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
     matrixBufferDesc.ByteWidth = sizeof(MatrixBufferType);
     matrixBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -1374,7 +1483,6 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
 
     // Create the constant buffer pointer so we can access the vertex shader constant buffer from within this class.
     result = _d3dDevice->CreateBuffer(&matrixBufferDesc, NULL, &m_matrixBuffer);
-
 
     XMMATRIX view = XMMatrixIdentity();
     XMMATRIX projection = XMMatrixOrthographicLH((float)_displaySizePixels.cx,
@@ -1401,7 +1509,7 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
     // Lock the constant buffer so it can be written to.
     D3D11_MAPPED_SUBRESOURCE mappedResource;
     result = _d3dDeviceContext->Map(m_matrixBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-    
+
     // Get a pointer to the data in the constant buffer.
     dataPtr = (MatrixBufferType*)mappedResource.pData;
 
@@ -1417,22 +1525,20 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
     // Finanly set the constant buffer in the vertex shader with the updated values.
     _d3dDeviceContext->VSSetConstantBuffers(bufferNumber, 1, &m_matrixBuffer);
 
-
     UINT stride = sizeof(QuadVertices[0]);
     UINT offset = 0;
     _d3dDeviceContext->IASetVertexBuffers(0, 1, &_pVertexBuffer, &stride, &offset);
     _d3dDeviceContext->IASetIndexBuffer(_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
     _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-
-   //     _d3dDeviceContext->ClearRenderTargetView(renderTargetView, bgColor);
+    //     _d3dDeviceContext->ClearRenderTargetView(renderTargetView, bgColor);
     _d3dDeviceContext->IASetInputLayout(vertexLayout);
     _d3dDeviceContext->VSSetShader(vertexShader.Get(), NULL, 0);
     _d3dDeviceContext->PSSetShader(pixelShader.Get(), NULL, 0);
 
     float nothing[4] = { 1.f, 0.f, 0.f, 0.f };
 
-	_d3dDeviceContext->ClearRenderTargetView(m_renderTargetView, nothing);
+    _d3dDeviceContext->ClearRenderTargetView(m_renderTargetView, nothing);
     _d3dDeviceContext->OMGetRenderTargets(1, &m_renderTargetView, nullptr);
     _d3dDeviceContext->DrawIndexed(6, 0, 0);
 
@@ -1444,7 +1550,7 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
     vertexLayout->Release();
     if (pBuffer)
         pBuffer->Release();
-
+#endif
     // D3DXMatrixOrthoLH
 
     /*_d2dRenderTarget->FillRectangle(D2D1::RectF(0.f,
@@ -1461,7 +1567,7 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
             _invalidRect.bottom - 100.0f),
         _d2dBrushForeground.Get());*/
     // tried to render to texture, maybe just render to framebuffer for now
-/*
+    /*
     ID3D11RenderTargetView* origTarget = nullptr;
 
     result = _d3dDevice->CreateRenderTargetView(pBuffer, NULL, &origTarget);
@@ -1485,7 +1591,6 @@ float4 main(float4 position : SV_POSITION) : SV_TARGET
 
 
     _d3dDeviceContext->OMSetRenderTargets(1, &origTarget, nullptr);*/
-
 
     return result;
 }

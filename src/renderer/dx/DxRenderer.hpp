@@ -175,6 +175,7 @@ namespace Microsoft::Console::Render
 
 
         [[nodiscard]] HRESULT _CreateDeviceResources(const bool createSwapChain) noexcept;
+        HRESULT _SetupTerminalEffects() noexcept;
 
         [[nodiscard]] HRESULT _PrepareRenderTarget() noexcept;
 
@@ -229,5 +230,12 @@ namespace Microsoft::Console::Render
         {
             return { color.r, color.g, color.b, color.a };
         }
+
+ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
+        ID3D11VertexShader* g_pVertexShader = nullptr;
+        ID3D11PixelShader* g_pPixelShader = nullptr;
+        ID3D11InputLayout* g_pVertexLayout = nullptr;
+        ID3D11Buffer* g_pVertexBuffer = nullptr;
+
     };
 }
