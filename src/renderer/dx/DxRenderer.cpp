@@ -22,6 +22,7 @@ using namespace DirectX;
 struct SimpleVertex
 {
     XMFLOAT3 Pos;
+    XMFLOAT2 Tex;
 };
 
 #pragma hdrstop
@@ -179,9 +180,9 @@ HRESULT DxEngine::_SetupTerminalEffects() noexcept
 struct VS_OUTPUT
 {
     float4 Pos : SV_POSITION;
-    float2 tex : TEXCOORD0;
+    float2 tex : TEXCOORD;
 };
-VS_OUTPUT main(float4 Pos : POSITION, float2 tex : TEXCOORD0)
+VS_OUTPUT main(float4 Pos : POSITION, float2 tex : TEXCOORD)
 {
 VS_OUTPUT output;
 output.Pos = Pos;
@@ -194,10 +195,10 @@ return output;
 Texture2D shaderTexture;
 SamplerState SampleType;
 
-float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD0) : SV_TARGET
+float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
 {
     // return float4(0, 0.5f, 0.5f, 1);
-    return shaderTexture.Sample(SampleType, tex);
+    return shaderTexture.Sample(SampleType, tex) * float4(1.0, 0.5, 0.5, 1.0);
 
     // return float4( 1.0f, 1.0f, 0.0f, 1.0f );    // Yellow, with Alpha = 1
 
@@ -244,12 +245,14 @@ float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD0) : SV_TARGET
         return hr;
 
     // Create vertex buffer
+    // 3 1
+    // 4 2
     SimpleVertex vertices[] =
     {
-        XMFLOAT3(1.f, 1.f, 0.f),
-        XMFLOAT3(1.f, -1.f, 0.f),
-        XMFLOAT3(-1.f, 1.f, 0.f),
-        XMFLOAT3(-1.f, -1.f, 0.f),
+        { XMFLOAT3(1.f, 1.f, 0.f), XMFLOAT2(1.f, 0.f) },
+        { XMFLOAT3(1.f, -1.f, 0.f), XMFLOAT2(1.f, 1.f) },
+        { XMFLOAT3(-1.f, 1.f, 0.f), XMFLOAT2(0.f, 0.f) },
+        { XMFLOAT3(-1.f, -1.f, 0.f), XMFLOAT2(0.f, 1.f) },
     };
     D3D11_BUFFER_DESC bd;
     ZeroMemory(&bd, sizeof(bd));
