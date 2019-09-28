@@ -236,6 +236,6 @@ ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
         ID3D11PixelShader* g_pPixelShader = nullptr;
         ID3D11InputLayout* g_pVertexLayout = nullptr;
         ID3D11Buffer* g_pVertexBuffer = nullptr;
-
+        ID3D11SamplerState* m_sampleState = nullptr;
     };
 }
