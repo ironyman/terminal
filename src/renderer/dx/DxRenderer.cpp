@@ -246,14 +246,15 @@ float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD0) : SV_TARGET
     // Create vertex buffer
     SimpleVertex vertices[] =
     {
-        XMFLOAT3(-1.f, 1.f, 0.f),
+        XMFLOAT3(1.f, 1.f, 0.f),
         XMFLOAT3(1.f, -1.f, 0.f),
+        XMFLOAT3(-1.f, 1.f, 0.f),
         XMFLOAT3(-1.f, -1.f, 0.f),
     };
     D3D11_BUFFER_DESC bd;
     ZeroMemory(&bd, sizeof(bd));
     bd.Usage = D3D11_USAGE_DEFAULT;
-    bd.ByteWidth = sizeof(SimpleVertex) * 3;
+    bd.ByteWidth = sizeof(SimpleVertex) * ARRAYSIZE(vertices);
     bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     bd.CPUAccessFlags = 0;
     D3D11_SUBRESOURCE_DATA InitData;
@@ -1422,7 +1423,7 @@ enum class CursorPaintType
     _d3dDeviceContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
 
     // Set primitive topology
-    _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
         // Clear the back buffer
     // _d3dDeviceContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
@@ -1434,7 +1435,7 @@ enum class CursorPaintType
     _d3dDeviceContext->PSSetShaderResources(0, 1, &fbCapView);
     _d3dDeviceContext->PSSetSamplers(0, 1, &m_sampleState);
 
-    _d3dDeviceContext->Draw(3, 0);
+    _d3dDeviceContext->Draw(4, 0);
 
     fbCapView->Release();
     // Present the information rendered to the back buffer to the front buffer (the screen)
