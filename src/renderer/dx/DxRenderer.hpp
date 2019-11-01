@@ -77,6 +77,8 @@ namespace Microsoft::Console::Render
 
         [[nodiscard]] HRESULT PaintCursor(const CursorOptions& options) noexcept override;
 
+        [[nodiscard]] HRESULT PaintTerminalEffects() noexcept override;
+
         [[nodiscard]] HRESULT UpdateDrawingBrushes(COLORREF const colorForeground,
                                                    COLORREF const colorBackground,
                                                    const WORD legacyColorAttribute,
@@ -168,7 +170,12 @@ namespace Microsoft::Console::Render
         ::Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> _d2dBrushBackground;
         ::Microsoft::WRL::ComPtr<IDXGISwapChain1> _dxgiSwapChain;
 
+        // ::Microsoft::WRL::ComPtr<ID3D11Texture2D> _framebufferCapture;
+        ID3D11Texture2D* _framebufferCapture;
+
+
         [[nodiscard]] HRESULT _CreateDeviceResources(const bool createSwapChain) noexcept;
+        HRESULT _SetupTerminalEffects() noexcept;
 
         [[nodiscard]] HRESULT _PrepareRenderTarget() noexcept;
 
@@ -223,5 +230,12 @@ namespace Microsoft::Console::Render
         {
             return { color.r, color.g, color.b, color.a };
         }
+
+ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
+        ID3D11VertexShader* g_pVertexShader = nullptr;
+        ID3D11PixelShader* g_pPixelShader = nullptr;
+        ID3D11InputLayout* g_pVertexLayout = nullptr;
+        ID3D11Buffer* g_pVertexBuffer = nullptr;
+        ID3D11SamplerState* m_sampleState = nullptr;
     };
 }

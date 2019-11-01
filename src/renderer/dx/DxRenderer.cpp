@@ -12,6 +12,19 @@
 #include "../../inc/DefaultSettings.h"
 #include <VersionHelpers.h>
 
+#include <DirectXMath.h>
+#include <d3dcompiler.h>
+#include <DirectXColors.h>
+
+#pragma comment(lib, "d3dcompiler.lib")
+using namespace DirectX;
+
+struct SimpleVertex
+{
+    XMFLOAT3 Pos;
+    XMFLOAT2 Tex;
+};
+
 #pragma hdrstop
 
 static constexpr float POINTS_PER_INCH = 72.0f;
@@ -112,6 +125,169 @@ DxEngine::~DxEngine()
     return S_OK;
 }
 
+int print_log(const char* format, ...)
+{
+    static char s_printf_buf[1024];
+    va_list args;
+    va_start(args, format);
+    _vsnprintf_s(s_printf_buf, sizeof(s_printf_buf), format, args);
+    va_end(args);
+    OutputDebugStringA(s_printf_buf);
+    return 0;
+}
+HRESULT DxEngine::_SetupTerminalEffects() noexcept
+{
+    /*
+            D3D11_TEXTURE2D_DESC framebufferCapture = { 0 };
+            framebufferCapture.Width = SwapChainDesc.Width;
+            framebufferCapture.Height = SwapChainDesc.Height;
+            framebufferCapture.MipLevels = 1;
+            framebufferCapture.ArraySize = 1;
+            framebufferCapture.Format = SwapChainDesc.Format;
+            framebufferCapture.SampleDesc.Count = SwapChainDesc.SampleDesc.Count;
+            framebufferCapture.SampleDesc.Quality = SwapChainDesc.SampleDesc.Quality;
+            framebufferCapture.Usage = D3D11_USAGE_DEFAULT;
+            framebufferCapture.CPUAccessFlags = 0;
+            framebufferCapture.MiscFlags = 0;*/
+    D3D11_TEXTURE2D_DESC framebufferCaptureDesc = { 0 };
+    ID3D11Texture2D* pBackBuffer = nullptr;
+    HRESULT hr = S_OK;
+
+    _dxgiSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+    pBackBuffer->GetDesc(&framebufferCaptureDesc);
+
+    framebufferCaptureDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+
+    _d3dDevice->CreateTexture2D(&framebufferCaptureDesc, NULL, &_framebufferCapture);
+
+    hr = _d3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_pRenderTargetView);
+    pBackBuffer->Release();
+    if (FAILED(hr))
+        return hr;
+
+    // Setup the viewport
+    D3D11_VIEWPORT vp;
+    vp.Width = (FLOAT)_displaySizePixels.cx;
+    vp.Height = (FLOAT)_displaySizePixels.cy;
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    vp.TopLeftX = 0;
+    vp.TopLeftY = 0;
+    _d3dDeviceContext->RSSetViewports(1, &vp);
+
+    char vertexShaderString[] =
+        R"(
+struct VS_OUTPUT
+{
+    float4 Pos : SV_POSITION;
+    float2 tex : TEXCOORD;
+};
+VS_OUTPUT main(float4 Pos : POSITION, float2 tex : TEXCOORD)
+{
+VS_OUTPUT output;
+output.Pos = Pos;
+output.tex = tex;
+return output;
+}
+)";
+    char pixelShaderString[] =
+        R"(
+Texture2D shaderTexture;
+SamplerState SampleType;
+
+float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
+{
+    // return float4(0, 0.5f, 0.5f, 1);
+    return shaderTexture.Sample(SampleType, tex) * float4(1.0, 0.5, 0.5, 1.0);
+
+    // return float4( 1.0f, 1.0f, 0.0f, 1.0f );    // Yellow, with Alpha = 1
+
+    // return color;
+}
+)";
+
+    Microsoft::WRL::ComPtr<ID3DBlob> vertexBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+
+    hr = D3DCompile(vertexShaderString, sizeof(vertexShaderString), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &vertexBlob, &errorBlob);
+
+    if (errorBlob)
+    {
+        print_log("%*s", (int)errorBlob->GetBufferSize(), (char*)errorBlob->GetBufferPointer());
+    }
+
+    hr = _d3dDevice->CreateVertexShader(
+        vertexBlob->GetBufferPointer(),
+        vertexBlob->GetBufferSize(),
+        nullptr,
+        &g_pVertexShader);
+
+    Microsoft::WRL::ComPtr<ID3DBlob> pixelBlob;
+
+    hr = D3DCompile(pixelShaderString, sizeof(pixelShaderString), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &pixelBlob, &errorBlob);
+    hr = _d3dDevice->CreatePixelShader(
+        pixelBlob->GetBufferPointer(),
+        pixelBlob->GetBufferSize(),
+        nullptr,
+        &g_pPixelShader);
+
+    // Define the input layout
+    D3D11_INPUT_ELEMENT_DESC layout[] =
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+    };
+    UINT numElements = ARRAYSIZE(layout);
+
+    // Create the input layout
+    hr = _d3dDevice->CreateInputLayout(layout, numElements, vertexBlob->GetBufferPointer(), vertexBlob->GetBufferSize(), &g_pVertexLayout);
+    if (FAILED(hr))
+        return hr;
+
+    // Create vertex buffer
+    // 3 1
+    // 4 2
+    SimpleVertex vertices[] =
+    {
+        { XMFLOAT3(1.f, 1.f, 0.f), XMFLOAT2(1.f, 0.f) },
+        { XMFLOAT3(1.f, -1.f, 0.f), XMFLOAT2(1.f, 1.f) },
+        { XMFLOAT3(-1.f, 1.f, 0.f), XMFLOAT2(0.f, 0.f) },
+        { XMFLOAT3(-1.f, -1.f, 0.f), XMFLOAT2(0.f, 1.f) },
+    };
+    D3D11_BUFFER_DESC bd;
+    ZeroMemory(&bd, sizeof(bd));
+    bd.Usage = D3D11_USAGE_DEFAULT;
+    bd.ByteWidth = sizeof(SimpleVertex) * ARRAYSIZE(vertices);
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    bd.CPUAccessFlags = 0;
+    D3D11_SUBRESOURCE_DATA InitData;
+    ZeroMemory(&InitData, sizeof(InitData));
+    InitData.pSysMem = vertices;
+    hr = _d3dDevice->CreateBuffer(&bd, &InitData, &g_pVertexBuffer);
+    if (FAILED(hr))
+        return hr;
+
+    // pBackBuffer->Release();
+    D3D11_SAMPLER_DESC samplerDesc;
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    samplerDesc.MipLODBias = 0.0f;
+    samplerDesc.MaxAnisotropy = 1;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+    samplerDesc.BorderColor[0] = 0;
+    samplerDesc.BorderColor[1] = 0;
+    samplerDesc.BorderColor[2] = 0;
+    samplerDesc.BorderColor[3] = 0;
+    samplerDesc.MinLOD = 0;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+    // Create the texture sampler state.
+    hr = _d3dDevice->CreateSamplerState(&samplerDesc, &m_sampleState);
+
+    return hr;
+}
 // Routine Description;
 // - Creates device-specific resources required for drawing
 //   which generally means those that are represented on the GPU and can
@@ -146,7 +322,7 @@ DxEngine::~DxEngine()
 // You can find out how to install it here:
 // https://docs.microsoft.com/en-us/windows/uwp/gaming/use-the-directx-runtime-and-visual-studio-graphics-diagnostic-features
                               // clang-format on
-                              // D3D11_CREATE_DEVICE_DEBUG |
+                              D3D11_CREATE_DEVICE_DEBUG |
                               D3D11_CREATE_DEVICE_SINGLETHREADED;
 
     const std::array<D3D_FEATURE_LEVEL, 5> FeatureLevels{ D3D_FEATURE_LEVEL_11_1,
@@ -250,6 +426,8 @@ DxEngine::~DxEngine()
             default:
                 THROW_HR(E_NOTIMPL);
             }
+
+            RETURN_IF_FAILED(_SetupTerminalEffects());
         }
         CATCH_RETURN();
 
@@ -1194,6 +1372,304 @@ enum class CursorPaintType
     }
 
     return S_OK;
+}
+
+// Routine Description:
+// - Paint terminal effects.
+// Arguments:
+// Return Value:
+// - S_OK or relevant DirectX error.
+[[nodiscard]] HRESULT DxEngine::PaintTerminalEffects() noexcept
+{
+    HRESULT result = S_OK;
+    ID3D11Texture2D* pBuffer = nullptr;
+
+    if (!_framebufferCapture)
+    {
+        return INTSAFE_E_ARITHMETIC_OVERFLOW;
+    }
+
+    result = _dxgiSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBuffer);
+    if (FAILED(result))
+    {
+        pBuffer->Release();
+        return result;
+    }
+
+    XMMATRIX view = XMMatrixIdentity();
+    XMMATRIX projection = XMMatrixOrthographicLH((float)_displaySizePixels.cx,
+                                                 (float)_displaySizePixels.cy,
+                                                 -1.f,
+                                                 1.f);
+
+    XMMATRIX worldMatrix = XMMatrixMultiply(view, projection);
+
+
+    _d3dDeviceContext->CopyResource(_framebufferCapture, pBuffer);
+
+    D3D11_TEXTURE2D_DESC desc;
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    ID3D11ShaderResourceView* fbCapView = nullptr;
+    _framebufferCapture->GetDesc(&desc);
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = desc.MipLevels;
+    srvDesc.Format = desc.Format;
+
+    result = _d3dDevice->CreateShaderResourceView(_framebufferCapture, &srvDesc, &fbCapView);
+
+    _d3dDeviceContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
+    
+    // Set vertex buffer
+    UINT stride = sizeof(SimpleVertex);
+    UINT offset = 0;
+    _d3dDeviceContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
+
+    // Set primitive topology
+    _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+        // Clear the back buffer
+    // _d3dDeviceContext->ClearRenderTargetView(g_pRenderTargetView, Colors::MidnightBlue);
+
+    // Render a triangle
+    _d3dDeviceContext->IASetInputLayout(g_pVertexLayout);
+    _d3dDeviceContext->VSSetShader(g_pVertexShader, nullptr, 0);
+    _d3dDeviceContext->PSSetShader(g_pPixelShader, nullptr, 0);
+    _d3dDeviceContext->PSSetShaderResources(0, 1, &fbCapView);
+    _d3dDeviceContext->PSSetSamplers(0, 1, &m_sampleState);
+
+    _d3dDeviceContext->Draw(4, 0);
+
+    fbCapView->Release();
+    // Present the information rendered to the back buffer to the front buffer (the screen)
+    // _dxgiSwapChain->Present(0, 0);
+
+#if 0
+    ID3D11RenderTargetView* m_renderTargetView = nullptr;
+
+    result = _d3dDevice->CreateRenderTargetView(pBuffer, NULL, &m_renderTargetView);
+
+    // draw to screen
+    XMFLOAT3 QuadVertices[] = {
+        XMFLOAT3(-0.5f, -1.0f, 0.0f),
+        XMFLOAT3(-1.0f, 1.0f, 0.0f),
+        XMFLOAT3(1.0f, -1.0f, 0.0f),
+        XMFLOAT3(1.0f, 1.0f, 0.0f),
+    };
+
+    // create the vertex buffer
+    D3D11_BUFFER_DESC bd = { 0 };
+
+    bd.Usage = D3D11_USAGE_DYNAMIC; // write access access by CPU and GPU
+    bd.ByteWidth = sizeof(QuadVertices);
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; // use as a vertex buffer
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE; // allow CPU to write in buffer
+
+    ID3D11Buffer* _pVertexBuffer = nullptr;
+    _d3dDevice->CreateBuffer(&bd, NULL, &_pVertexBuffer); // create the buffer
+
+    D3D11_MAPPED_SUBRESOURCE ms;
+    _d3dDeviceContext->Map(_pVertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); // map the buffer
+    RtlCopyMemory(ms.pData, QuadVertices, sizeof(QuadVertices)); // copy the data
+    _d3dDeviceContext->Unmap(_pVertexBuffer, NULL); // unmap the buffer
+
+    WORD indices[] = {
+        0,
+        1,
+        2,
+        2,
+        1,
+        3,
+    };
+
+    D3D11_BUFFER_DESC indexDesc = { 0 };
+
+    indexDesc.Usage = D3D11_USAGE_DEFAULT;
+    indexDesc.ByteWidth = sizeof(indices);
+    indexDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    indexDesc.CPUAccessFlags = 0;
+
+    D3D11_SUBRESOURCE_DATA indexData = { 0 };
+    indexData.pSysMem = indices;
+
+    ID3D11Buffer* _pIndexBuffer = nullptr;
+    _d3dDevice->CreateBuffer(&indexDesc, &indexData, &_pIndexBuffer);
+
+    char vertexShaderString[] =
+        R"(
+flaot4 main(float4 position : POSITION) : SV_POSITION
+{
+return position;
+}
+)";
+    char pixelShaderString[] =
+        R"(
+float4 main(float4 position : SV_POSITION) : SV_TARGET
+{
+    return float4(0, 0.5f, 0.5f, 1);
+    // return color;
+
+}
+)";
+
+    Microsoft::WRL::ComPtr<ID3DBlob> vertexBlob;
+    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+
+    result = D3DCompile(vertexShaderString, sizeof(vertexShaderString), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &vertexBlob, &errorBlob);
+
+    Microsoft::WRL::ComPtr<ID3D11VertexShader> vertexShader;
+    result = _d3dDevice->CreateVertexShader(
+        vertexBlob->GetBufferPointer(),
+        vertexBlob->GetBufferSize(),
+        nullptr,
+        &vertexShader);
+
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> pixelShader;
+    Microsoft::WRL::ComPtr<ID3DBlob> pixelBlob;
+
+    result = D3DCompile(pixelShaderString, sizeof(pixelShaderString), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &pixelBlob, &errorBlob);
+    result = _d3dDevice->CreatePixelShader(
+        pixelBlob->GetBufferPointer(),
+        pixelBlob->GetBufferSize(),
+        nullptr,
+        &pixelShader);
+
+    // Define the input layout
+    D3D11_INPUT_ELEMENT_DESC layout[] = {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    UINT numElements = ARRAYSIZE(layout);
+    ID3D11InputLayout* vertexLayout = nullptr;
+
+    // Create the input layout
+    result = _d3dDevice->CreateInputLayout(layout, numElements, vertexBlob->GetBufferPointer(), vertexBlob->GetBufferSize(), &vertexLayout);
+
+    struct MatrixBufferType
+    {
+        XMMATRIX worldMatrix;
+    };
+
+    ID3D11Buffer* m_matrixBuffer;
+    D3D11_BUFFER_DESC matrixBufferDesc = { 0 };
+    matrixBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+    matrixBufferDesc.ByteWidth = sizeof(MatrixBufferType);
+    matrixBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    matrixBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    matrixBufferDesc.MiscFlags = 0;
+    matrixBufferDesc.StructureByteStride = 0;
+
+    // Create the constant buffer pointer so we can access the vertex shader constant buffer from within this class.
+    result = _d3dDevice->CreateBuffer(&matrixBufferDesc, NULL, &m_matrixBuffer);
+
+    XMMATRIX view = XMMatrixIdentity();
+    XMMATRIX projection = XMMatrixOrthographicLH((float)_displaySizePixels.cx,
+                                                 (float)_displaySizePixels.cy,
+                                                 -1.f,
+                                                 1.f);
+    XMMATRIX worldMatrix = XMMatrixMultiply(view, projection);
+
+    D3D11_VIEWPORT vp;
+    vp.Width = (FLOAT)_displaySizePixels.cx;
+    vp.Height = (FLOAT)_displaySizePixels.cy;
+    vp.MinDepth = -1.0f;
+    vp.MaxDepth = 1.0f;
+    vp.TopLeftX = 0;
+    vp.TopLeftY = 0;
+    _d3dDeviceContext->RSSetViewports(1, &vp);
+
+    MatrixBufferType* dataPtr;
+    unsigned int bufferNumber;
+
+    // Transpose the matrices to prepare them for the shader.
+    XMMatrixTranspose(worldMatrix);
+
+    // Lock the constant buffer so it can be written to.
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    result = _d3dDeviceContext->Map(m_matrixBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+
+    // Get a pointer to the data in the constant buffer.
+    dataPtr = (MatrixBufferType*)mappedResource.pData;
+
+    // Copy the matrices into the constant buffer.
+    dataPtr->worldMatrix = worldMatrix;
+
+    // Unlock the constant buffer.
+    _d3dDeviceContext->Unmap(m_matrixBuffer, 0);
+
+    // Set the position of the constant buffer in the vertex shader.
+    bufferNumber = 0;
+
+    // Finanly set the constant buffer in the vertex shader with the updated values.
+    _d3dDeviceContext->VSSetConstantBuffers(bufferNumber, 1, &m_matrixBuffer);
+
+    UINT stride = sizeof(QuadVertices[0]);
+    UINT offset = 0;
+    _d3dDeviceContext->IASetVertexBuffers(0, 1, &_pVertexBuffer, &stride, &offset);
+    _d3dDeviceContext->IASetIndexBuffer(_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    _d3dDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    //     _d3dDeviceContext->ClearRenderTargetView(renderTargetView, bgColor);
+    _d3dDeviceContext->IASetInputLayout(vertexLayout);
+    _d3dDeviceContext->VSSetShader(vertexShader.Get(), NULL, 0);
+    _d3dDeviceContext->PSSetShader(pixelShader.Get(), NULL, 0);
+
+    float nothing[4] = { 1.f, 0.f, 0.f, 0.f };
+
+    _d3dDeviceContext->ClearRenderTargetView(m_renderTargetView, nothing);
+    _d3dDeviceContext->OMGetRenderTargets(1, &m_renderTargetView, nullptr);
+    _d3dDeviceContext->DrawIndexed(6, 0, 0);
+
+    pixelShader->Release();
+    vertexShader->Release();
+    _pIndexBuffer->Release();
+    _pVertexBuffer->Release();
+    m_matrixBuffer->Release();
+    vertexLayout->Release();
+    if (pBuffer)
+        pBuffer->Release();
+#endif
+    // D3DXMatrixOrthoLH
+
+    /*_d2dRenderTarget->FillRectangle(D2D1::RectF(0.f,
+                                                0.f,
+                                                (float)_displaySizePixels.cx,
+                                                (float)_displaySizePixels.cy),
+                                    _d2dBrushForeground.Get());*/
+
+    /*_d2dRenderTarget->DrawRectangle(
+        D2D1::RectF(
+            _invalidRect.left + 100.0f,
+            _invalidRect.top + 100.0f,
+            _invalidRect.right - 100.0f,
+            _invalidRect.bottom - 100.0f),
+        _d2dBrushForeground.Get());*/
+    // tried to render to texture, maybe just render to framebuffer for now
+    /*
+    ID3D11RenderTargetView* origTarget = nullptr;
+
+    result = _d3dDevice->CreateRenderTargetView(pBuffer, NULL, &origTarget);
+    if (FAILED(result))
+    {
+        goto cleanup;
+    }
+
+    result = _d3dDevice->CreateRenderTargetView(pBuffer, NULL, &origTarget);
+    if (FAILED(result))
+    {
+        goto cleanup;
+    }
+
+
+    _d3dDeviceContext->OMSetRenderTargets(1, &origTarget, nullptr);
+
+    float nothing[4]= { 0 };
+    _d3dDeviceContext->ClearRenderTargetView(origTarget, nothing);
+
+
+
+    _d3dDeviceContext->OMSetRenderTargets(1, &origTarget, nullptr);*/
+
+    return result;
 }
 
 // Routine Description:
