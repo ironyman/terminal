@@ -45,6 +45,11 @@ char pixelShaderString[] = R"(
 Texture2D shaderTexture;
 SamplerState samplerState;
 
+#define SCANLINE_FACTOR 0.5
+#define SCANLINE_PERIOD 1
+
+static const float M_PI = 3.14159265f;
+
 // https://en.wikipedia.org/wiki/Gaussian_blur
 static float gaussianKernel[7][7] =
 {
@@ -85,6 +90,27 @@ float4 Blur(Texture2D input, float2 tex_coord)
     return color;
 }
 
+float SquareWave(float y)
+{
+    // Square wave gogogo.
+    // return 1.0 - SCANLINE_FACTOR * (1 - fmod(pos.y, 2.0));
+    // return sin(pos.y / SCANLINE_PERIOD * 2.0 * M_PI) >= 0.0 ? 1: SCANLINE_FACTOR;
+    return 1 - (floor(y / SCANLINE_PERIOD) % 2) * SCANLINE_FACTOR;
+}
+float Scanline(float4 color, float4 pos)
+{
+    float wave = SquareWave(pos.y);
+
+    if (length(color.rgb) < 0.2)
+    {
+        return color + wave*0.1;
+    }
+    else
+    {
+        return color * wave;
+    }
+}
+
 float4 main(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
 {
     // return float4(0, 0.5f, 0.5f, 1);
@@ -93,7 +119,13 @@ float4 main(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
     // return color;
     float4 greener = float4(0.5, 2, 0.5, 1);
     Texture2D input = shaderTexture;
-    return Blur(input, tex) + input.Sample(samplerState, tex) * greener;
+
+    float4 color = input.Sample(samplerState, tex);
+    color += Blur(input, tex);
+    color = Scanline(color, pos);
+    color *= greener;
+
+    return color;
 }
 )";
 
@@ -390,7 +422,7 @@ HRESULT DxEngine::_SetupTerminalEffects() noexcept
 // You can find out how to install it here:
 // https://docs.microsoft.com/en-us/windows/uwp/gaming/use-the-directx-runtime-and-visual-studio-graphics-diagnostic-features
                               // clang-format on
-                              D3D11_CREATE_DEVICE_DEBUG |
+                     //         D3D11_CREATE_DEVICE_DEBUG |
                               D3D11_CREATE_DEVICE_SINGLETHREADED;
 
     const std::array<D3D_FEATURE_LEVEL, 5> FeatureLevels{ D3D_FEATURE_LEVEL_11_1,
