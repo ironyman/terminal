@@ -25,6 +25,78 @@ struct SimpleVertex
     XMFLOAT2 Tex;
 };
 
+
+char vertexShaderString[] = R"(
+struct VS_OUTPUT
+{
+    float4 Pos : SV_POSITION;
+    float2 tex : TEXCOORD;
+};
+VS_OUTPUT main(float4 Pos : POSITION, float2 tex : TEXCOORD)
+{
+    VS_OUTPUT output;
+    output.Pos = Pos;
+    output.tex = tex;
+    return output;
+}
+)";
+
+char pixelShaderString[] = R"(
+Texture2D shaderTexture;
+SamplerState samplerState;
+
+// https://en.wikipedia.org/wiki/Gaussian_blur
+static float gaussianKernel[7][7] =
+{
+    { 0.00000067, 0.00002292, 0.00019117, 0.00038771, 0.00019117, 0.00002292, 0.00000067 },
+    { 0.00002292, 0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633, 0.00002292 },
+    { 0.00019117, 0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965, 0.00019117 },
+    { 0.00038771, 0.01330373, 0.11098164, 0.22508352, 0.11098164, 0.01330373, 0.00038771 },
+    { 0.00019117, 0.00655965, 0.05472157, 0.11098164, 0.05472157, 0.00655965, 0.00019117 },
+    { 0.00002292, 0.00078633, 0.00655965, 0.01330373, 0.00655965, 0.00078633, 0.00002292 },
+    { 0.00000067, 0.00002292, 0.00019117, 0.00038771, 0.00019117, 0.00002292, 0.00000067 }
+};
+
+float4 Blur(Texture2D input, float2 tex_coord)
+{
+    uint width, height;
+    
+    shaderTexture.GetDimensions(width, height);
+
+    float pixelWidth = 1.0f/width;
+    float pixelHeight = 1.0f/height;
+
+    float4 color = { 0, 0, 0, 0 };
+    float factor = 1;
+
+    int start = 0, end = 7; // sizeof(gaussianKernel[0])
+    for (int x = start; x < end; x++) 
+    {
+        float2 samplePos = { 0, 0 };
+
+        samplePos.x = tex_coord.x + (x - 7/2) * pixelWidth;
+        for (int y = start; y < end; y++)
+        {
+            samplePos.y = tex_coord.y + (y - 7/2) * pixelHeight;
+            color += input.Sample(samplerState, samplePos) * gaussianKernel[x][y] * factor;
+        }
+    }
+
+    return color;
+}
+
+float4 main(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
+{
+    // return float4(0, 0.5f, 0.5f, 1);
+    // return shaderTexture.Sample(SampleType, tex) * float4(1.0, 0.5, 0.5, 1.0);
+    // return float4( 1.0f, 1.0f, 0.0f, 1.0f );    // Yellow, with Alpha = 1
+    // return color;
+    float4 greener = float4(0.5, 2, 0.5, 1);
+    Texture2D input = shaderTexture;
+    return Blur(input, tex) + input.Sample(samplerState, tex) * greener;
+}
+)";
+
 #pragma hdrstop
 
 static constexpr float POINTS_PER_INCH = 72.0f;
@@ -125,7 +197,7 @@ DxEngine::~DxEngine()
     return S_OK;
 }
 
-int print_log(const char* format, ...)
+int DbgPrint(const char* format, ...)
 {
     static char s_printf_buf[1024];
     va_list args;
@@ -135,6 +207,42 @@ int print_log(const char* format, ...)
     OutputDebugStringA(s_printf_buf);
     return 0;
 }
+
+Microsoft::WRL::ComPtr<ID3DBlob>
+_CompileShader(
+    std::string source,
+    std::string target,
+    std::string entry = "main") noexcept
+{
+    Microsoft::WRL::ComPtr<ID3DBlob> code{};
+    Microsoft::WRL::ComPtr<ID3DBlob> error{};
+
+    HRESULT hr = D3DCompile(
+        source.c_str(),
+        source.size(),
+        nullptr,
+        nullptr,
+        nullptr,
+        entry.c_str(),
+        target.c_str(),
+        0,
+        0,
+        &code,
+        &error);
+
+    if (FAILED(hr))
+    {
+        DbgPrint("D3DCompile failed with %x\n", hr);
+        if (error)
+        {
+            DbgPrint("D3DCompile error: %*s\n", (int)error->GetBufferSize(), (char *)error->GetBufferPointer());
+        }
+        __debugbreak();
+    }
+
+    return code;
+}
+
 HRESULT DxEngine::_SetupTerminalEffects() noexcept
 {
     /*
@@ -175,46 +283,8 @@ HRESULT DxEngine::_SetupTerminalEffects() noexcept
     vp.TopLeftY = 0;
     _d3dDeviceContext->RSSetViewports(1, &vp);
 
-    char vertexShaderString[] =
-        R"(
-struct VS_OUTPUT
-{
-    float4 Pos : SV_POSITION;
-    float2 tex : TEXCOORD;
-};
-VS_OUTPUT main(float4 Pos : POSITION, float2 tex : TEXCOORD)
-{
-VS_OUTPUT output;
-output.Pos = Pos;
-output.tex = tex;
-return output;
-}
-)";
-    char pixelShaderString[] =
-        R"(
-Texture2D shaderTexture;
-SamplerState SampleType;
-
-float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
-{
-    // return float4(0, 0.5f, 0.5f, 1);
-    return shaderTexture.Sample(SampleType, tex) * float4(1.0, 0.5, 0.5, 1.0);
-
-    // return float4( 1.0f, 1.0f, 0.0f, 1.0f );    // Yellow, with Alpha = 1
-
-    // return color;
-}
-)";
-
-    Microsoft::WRL::ComPtr<ID3DBlob> vertexBlob;
-    Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-
-    hr = D3DCompile(vertexShaderString, sizeof(vertexShaderString), nullptr, nullptr, nullptr, "main", "vs_5_0", 0, 0, &vertexBlob, &errorBlob);
-
-    if (errorBlob)
-    {
-        print_log("%*s", (int)errorBlob->GetBufferSize(), (char*)errorBlob->GetBufferPointer());
-    }
+    auto vertexBlob = _CompileShader(vertexShaderString, "vs_5_0");
+    auto pixelBlob = _CompileShader(pixelShaderString, "ps_5_0");
 
     hr = _d3dDevice->CreateVertexShader(
         vertexBlob->GetBufferPointer(),
@@ -222,9 +292,6 @@ float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
         nullptr,
         &g_pVertexShader);
 
-    Microsoft::WRL::ComPtr<ID3DBlob> pixelBlob;
-
-    hr = D3DCompile(pixelShaderString, sizeof(pixelShaderString), nullptr, nullptr, nullptr, "main", "ps_5_0", 0, 0, &pixelBlob, &errorBlob);
     hr = _d3dDevice->CreatePixelShader(
         pixelBlob->GetBufferPointer(),
         pixelBlob->GetBufferSize(),
@@ -288,6 +355,7 @@ float4 main(float4 Pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
 
     return hr;
 }
+
 // Routine Description;
 // - Creates device-specific resources required for drawing
 //   which generally means those that are represented on the GPU and can
