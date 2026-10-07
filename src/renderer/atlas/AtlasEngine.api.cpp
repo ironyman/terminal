@@ -424,29 +424,29 @@ void AtlasEngine::SetRetroTerminalEffect(bool enable) noexcept
     }
 }
 
-void AtlasEngine::SetCursorGlide(bool enable) noexcept
+void AtlasEngine::SetSmoothCursor(bool enable) noexcept
 {
-    if ((_api.s->cursor->glide != 0) != enable)
+    if ((_api.s->cursor->smooth != 0) != enable)
     {
-        _api.s.write()->cursor.write()->glide = enable ? 1 : 0;
+        _api.s.write()->cursor.write()->smooth = enable ? 1 : 0;
     }
 }
 
-void AtlasEngine::SetCursorGlideShear(bool enable) noexcept
+void AtlasEngine::SetSmoothCursorShear(bool enable) noexcept
 {
-    if ((_api.s->cursor->glideShear != 0) != enable)
+    if ((_api.s->cursor->smoothShear != 0) != enable)
     {
-        _api.s.write()->cursor.write()->glideShear = enable ? 1 : 0;
+        _api.s.write()->cursor.write()->smoothShear = enable ? 1 : 0;
     }
 }
 
-void AtlasEngine::SetCursorGlideSpeed(uint32_t percent) noexcept
+void AtlasEngine::SetSmoothCursorDuration(uint32_t milliseconds) noexcept
 {
-    // The speed is a percentage between 1 (slowest) and 100 (nearly instant).
-    percent = std::clamp(percent, 1u, 100u);
-    if (_api.s->cursor->glideSpeed != percent)
+    // The duration is the time the slowest corner takes to arrive.
+    milliseconds = std::clamp(milliseconds, 10u, 500u);
+    if (_api.s->cursor->smoothDuration != milliseconds)
     {
-        _api.s.write()->cursor.write()->glideSpeed = percent;
+        _api.s.write()->cursor.write()->smoothDuration = milliseconds;
     }
 }
 

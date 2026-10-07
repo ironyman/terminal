@@ -454,9 +454,9 @@ namespace winrt::Microsoft::Terminal::Control::implementation
             }
 
             _renderEngine->SetRetroTerminalEffect(_settings.RetroTerminalEffect());
-            _renderEngine->SetCursorGlide(_settings.CursorGlide());
-            _renderEngine->SetCursorGlideShear(_settings.CursorGlideShear());
-            _renderEngine->SetCursorGlideSpeed(_settings.CursorGlideSpeed());
+            _renderEngine->SetSmoothCursor(_settings.SmoothCursor());
+            _renderEngine->SetSmoothCursorShear(_settings.SmoothCursorShear());
+            _renderEngine->SetSmoothCursorDuration(_settings.SmoothCursorDuration());
             _renderEngine->SetPixelShaderPath(_settings.PixelShaderPath());
             _renderEngine->SetPixelShaderImagePath(_settings.PixelShaderImagePath());
             _renderEngine->SetGraphicsAPI(parseGraphicsAPI(_settings.GraphicsAPI()));
@@ -1008,9 +1008,9 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         {
             // Update AtlasEngine settings under the lock
             _renderEngine->SetRetroTerminalEffect(newAppearance.RetroTerminalEffect());
-            _renderEngine->SetCursorGlide(newAppearance.CursorGlide());
-            _renderEngine->SetCursorGlideShear(newAppearance.CursorGlideShear());
-            _renderEngine->SetCursorGlideSpeed(newAppearance.CursorGlideSpeed());
+            _renderEngine->SetSmoothCursor(newAppearance.SmoothCursor());
+            _renderEngine->SetSmoothCursorShear(newAppearance.SmoothCursorShear());
+            _renderEngine->SetSmoothCursorDuration(newAppearance.SmoothCursorDuration());
             _renderEngine->SetPixelShaderPath(newAppearance.PixelShaderPath());
             _renderEngine->SetPixelShaderImagePath(newAppearance.PixelShaderImagePath());
 

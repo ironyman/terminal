@@ -388,13 +388,13 @@ namespace Microsoft::Console::Render::Atlas
         u32 cursorColor = 0xffffffff;
         u16 cursorType = 0;
         u16 heightPercentage = 20;
-        // Non-zero if the cursor should glide between cells instead of jumping.
+        // Non-zero if the cursor should animate smoothly between cells instead of jumping.
         // (This is a u32 instead of a bool to avoid padding, as ATLAS_POD_OPS uses memcmp.)
-        u32 glide = 0;
-        // Non-zero if the gliding cursor should also shear (let its corners lag behind individually).
-        u32 glideShear = 0;
-        // How fast the gliding cursor moves, in percent from 1 (slow) to 100 (nearly instant). 50 is the default.
-        u32 glideSpeed = 50;
+        u32 smooth = 0;
+        // Non-zero if the smooth cursor should also shear (let its corners lag behind individually).
+        u32 smoothShear = 0;
+        // How long the smooth cursor takes to arrive in milliseconds, from 10 to 500. 150 is the default.
+        u32 smoothDuration = 150;
     };
 
     struct MiscellaneousSettings
@@ -580,15 +580,15 @@ namespace Microsoft::Console::Render::Atlas
         std::array<til::generation_t, 3> colorBitmapGenerations{ 1, 1, 1 };
         // In columns/rows.
         til::rect cursorRect;
-        // If true, the cursor is drawn inside cursorGlideRect (in pixel) instead of inside
-        // cursorRect. cursorGlideRect is the animated, possibly stretched, bounding box of the cursor cell.
-        bool cursorGlide = false;
+        // If true, the cursor is drawn inside smoothCursorRect (in pixel) instead of inside
+        // cursorRect. smoothCursorRect is the animated, possibly stretched, bounding box of the cursor cell.
+        bool smoothCursor = false;
         // The bounding box of the animated cursor.
-        i32r cursorGlideRect{};
+        i32r smoothCursorRect{};
         // If true, the cursor is not an axis-aligned box, but a quad whose corners lag behind individually.
-        // cursorGlideCorners contains its corners in pixel: top-left, top-right, bottom-right, bottom-left (x, y).
-        bool cursorGlideStretch = false;
-        std::array<i32, 8> cursorGlideCorners{};
+        // smoothCursorCorners contains its corners in pixel: top-left, top-right, bottom-right, bottom-left (x, y).
+        bool smoothCursorStretch = false;
+        std::array<i32, 8> smoothCursorCorners{};
         // The viewport/SwapChain area to be presented. In pixel.
         // NOTE:
         //   This cannot use til::rect, because til::rect generally expects positive coordinates only

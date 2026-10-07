@@ -2054,13 +2054,13 @@ void BackendD3D::_drawCursorBackground(const RenderingPayload& p)
         }
     }
 
-    if (p.cursorGlide && p.cursorGlideStretch && !_cursorRects.empty())
+    if (p.smoothCursor && p.smoothCursorStretch && !_cursorRects.empty())
     {
-        // A gliding cursor with shear is a quad whose corners lag behind individually. The animated quad
+        // A smooth cursor with shear is a quad whose corners lag behind individually. The animated quad
         // is that of the entire cell(s) the cursor is targeting (top-left, top-right, bottom-right, bottom-left).
         // Every part of the cursor (a bar, an underscore, a block, ...) is a rectangle inside of that cell.
         // We map the 4 corners of each part into the animated quad, which gives us a quad for each of them.
-        const auto& k = p.cursorGlideCorners;
+        const auto& k = p.smoothCursorCorners;
         const auto targetLeft = static_cast<f32>(_cursorPosition.left);
         const auto targetTop = static_cast<f32>(_cursorPosition.top);
         const auto targetWidth = static_cast<f32>(_cursorPosition.right - _cursorPosition.left);
@@ -2146,21 +2146,21 @@ void BackendD3D::_drawCursorBackground(const RenderingPayload& p)
             std::max(bounds.bottom, 0),
         };
     }
-    else if (p.cursorGlide)
+    else if (p.smoothCursor)
     {
         // The code above has laid out the cursor inside the cell(s) it's targeting. We now map
         // that cell box onto the animated box. This way every cursor shape, from the thin
-        // bar to the underscore, glides. (Only the block cursor stretches. See above.)
-        const auto& g = p.cursorGlideRect;
+        // bar to the underscore, animates. (Only the block cursor stretches. See above.)
+        const auto& g = p.smoothCursorRect;
         const int64_t targetLeft = _cursorPosition.left;
         const int64_t targetTop = _cursorPosition.top;
         const int64_t targetWidth = _cursorPosition.right - _cursorPosition.left;
         const int64_t targetHeight = _cursorPosition.bottom - _cursorPosition.top;
-        const int64_t glideWidth = g.right - g.left;
-        const int64_t glideHeight = g.bottom - g.top;
+        const int64_t smoothWidth = g.right - g.left;
+        const int64_t smoothHeight = g.bottom - g.top;
 
-        const auto mapX = [&](int64_t x) { return static_cast<i32>(g.left + (x - targetLeft) * glideWidth / targetWidth); };
-        const auto mapY = [&](int64_t y) { return static_cast<i32>(g.top + (y - targetTop) * glideHeight / targetHeight); };
+        const auto mapX = [&](int64_t x) { return static_cast<i32>(g.left + (x - targetLeft) * smoothWidth / targetWidth); };
+        const auto mapY = [&](int64_t y) { return static_cast<i32>(g.top + (y - targetTop) * smoothHeight / targetHeight); };
 
         for (auto& c : _cursorRects)
         {

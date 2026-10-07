@@ -74,9 +74,9 @@ namespace Microsoft::Console::Render::Atlas
         void SetPixelShaderPath(std::wstring_view value) noexcept;
         void SetPixelShaderImagePath(std::wstring_view value) noexcept;
         void SetRetroTerminalEffect(bool enable) noexcept;
-        void SetCursorGlide(bool enable) noexcept;
-        void SetCursorGlideShear(bool enable) noexcept;
-        void SetCursorGlideSpeed(uint32_t percent) noexcept;
+        void SetSmoothCursor(bool enable) noexcept;
+        void SetSmoothCursorShear(bool enable) noexcept;
+        void SetSmoothCursorDuration(uint32_t milliseconds) noexcept;
         void SetSoftwareRendering(bool enable) noexcept;
         void SetDisablePartialInvalidation(bool enable) noexcept;
         void SetGraphicsAPI(GraphicsAPI graphicsAPI) noexcept;
@@ -132,20 +132,36 @@ namespace Microsoft::Console::Render::Atlas
         std::unique_ptr<IBackend> _b;
         RenderingPayload _p;
 
-        // The state of the "glide" cursor animation (similar to Neovide's smooth cursor).
-        // Each of the 4 corners of the cursor's cell box chases its target with its own speed.
-        // If shearing is enabled, the corners are ranked by how well they line up with the direction
-        // of travel: Leading corners are fast, trailing ones are slow. This stretches and shears
-        // the cursor while it moves and makes it contract again once it arrives.
-        // Otherwise all corners use the same speed and the cursor just slides.
+        // The state of the smooth cursor animation. It's a port of Neovide's cursor renderer:
+        // Each of the 4 corners of the cursor's cell box is pulled towards its destination by two
+        // critically damped springs (one per axis). When the cursor moves, every corner is given
+        // an animation length depending on how well it lines up with the direction of travel:
+        // Leading corners arrive (almost) immediately while trailing ones take the full duration.
+        // This stretches and shears the cursor while it moves and makes it contract again once it arrives.
+        // Without shear all corners use the same length and the cursor just slides.
         // This is only accessed by the thread that calls StartPaint(), PaintCursor(), etc.
-        struct CursorGlide
+        struct SmoothCursor
         {
-            // Corners are ordered top-left, top-right, bottom-right, bottom-left (x, y in pixel).
-            std::array<f32, 8> corners{};
+            // The offset between a corner's position and its destination in pixel,
+            // which the spring drives towards zero. The velocity is kept when retargeting.
+            struct Spring
+            {
+                f32 position = 0;
+                f32 velocity = 0;
+            };
+            struct Corner
+            {
+                // x, y in pixel.
+                std::array<f32, 2> current{};
+                std::array<f32, 2> previousDestination{};
+                std::array<Spring, 2> spring{};
+                // How long (in seconds) the corner takes to reach its destination (within 2%).
+                f32 animationLength = 0;
+            };
+            // Corners are ordered top-left, top-right, bottom-right, bottom-left.
+            std::array<Corner, 4> corners{};
+            // The destinations of the corners (x, y in pixel).
             std::array<i32, 8> target{};
-            // How long (in seconds) each corner takes to cover about two thirds of the distance to its target.
-            std::array<f32, 4> lag{};
             u16x2 cellSize{};
             std::chrono::steady_clock::time_point lastStep;
             // True if corners contains a meaningful value.
@@ -156,12 +172,12 @@ namespace Microsoft::Console::Render::Atlas
             bool stretch = false;
             // True if PaintCursor() was called during the current frame.
             bool painted = false;
-            // The area of the glide cursor that has been drawn during the last frame.
+            // The area of the smooth cursor that has been drawn during the last frame.
             // It needs to be repainted during the next frame (empty if nothing was drawn).
             i32r drawn{};
-        } _glide;
-        void _stepCursorGlide() noexcept;
-        void _retargetCursorGlide(const std::array<i32, 8>& target) noexcept;
+        } _smooth;
+        void _stepSmoothCursor() noexcept;
+        void _retargetSmoothCursor(const std::array<i32, 8>& target) noexcept;
 
         struct ApiState
         {

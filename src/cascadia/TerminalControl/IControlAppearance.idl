@@ -16,9 +16,9 @@ namespace Microsoft.Terminal.Control
 
         // Experimental settings
         Boolean RetroTerminalEffect { get; };
-        Boolean CursorGlide { get; };
-        Boolean CursorGlideShear { get; };
-        UInt32 CursorGlideSpeed { get; };
+        Boolean SmoothCursor { get; };
+        Boolean SmoothCursorShear { get; };
+        UInt32 SmoothCursorDuration { get; };
         String PixelShaderPath { get; };
         String PixelShaderImagePath { get; };
 

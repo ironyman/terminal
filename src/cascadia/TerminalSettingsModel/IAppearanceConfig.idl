@@ -50,9 +50,9 @@ namespace Microsoft.Terminal.Settings.Model
         INHERITABLE_APPEARANCE_SETTING(ConvergedAlignment, BackgroundImageAlignment);
 
         INHERITABLE_APPEARANCE_SETTING(Boolean, RetroTerminalEffect);
-        INHERITABLE_APPEARANCE_SETTING(Boolean, CursorGlide);
-        INHERITABLE_APPEARANCE_SETTING(Boolean, CursorGlideShear);
-        INHERITABLE_APPEARANCE_SETTING(UInt32, CursorGlideSpeed);
+        INHERITABLE_APPEARANCE_SETTING(Boolean, SmoothCursor);
+        INHERITABLE_APPEARANCE_SETTING(Boolean, SmoothCursorShear);
+        INHERITABLE_APPEARANCE_SETTING(UInt32, SmoothCursorDuration);
         INHERITABLE_APPEARANCE_SETTING(IMediaResource, PixelShaderPath);
         INHERITABLE_APPEARANCE_SETTING(IMediaResource, PixelShaderImagePath);
         INHERITABLE_APPEARANCE_SETTING(IntenseStyle, IntenseTextStyle);

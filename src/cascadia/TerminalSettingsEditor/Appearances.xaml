@@ -621,37 +621,37 @@
                 </Grid>
             </local:SettingsCard>
 
-            <!--  Cursor Glide  -->
-            <local:SettingsCard x:Name="CursorGlide"
-                                x:Uid="Profile_CursorGlide"
+            <!--  Smooth Cursor  -->
+            <local:SettingsCard x:Name="SmoothCursor"
+                                x:Uid="Profile_SmoothCursor"
                                 Margin="0,4,0,0"
                                 Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
                 <StackPanel Style="{StaticResource SettingControlStackStyle}">
                     <ToggleSwitch VerticalAlignment="Center"
-                                  IsOn="{x:Bind Appearance.CursorGlide, Mode=TwoWay}"
+                                  IsOn="{x:Bind Appearance.SmoothCursor, Mode=TwoWay}"
                                   Style="{StaticResource ToggleSwitchInExpanderStyle}" />
-                    <local:SettingResetButton SettingName="CursorGlide"
+                    <local:SettingResetButton SettingName="SmoothCursor"
                                               Target="{x:Bind Appearance}" />
                 </StackPanel>
             </local:SettingsCard>
 
-            <!--  Cursor Glide Shear  -->
-            <local:SettingsCard x:Name="CursorGlideShear"
-                                x:Uid="Profile_CursorGlideShear"
+            <!--  Smooth Cursor Shear  -->
+            <local:SettingsCard x:Name="SmoothCursorShear"
+                                x:Uid="Profile_SmoothCursorShear"
                                 Margin="0,4,0,0"
                                 Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
                 <StackPanel Style="{StaticResource SettingControlStackStyle}">
                     <ToggleSwitch VerticalAlignment="Center"
-                                  IsOn="{x:Bind Appearance.CursorGlideShear, Mode=TwoWay}"
+                                  IsOn="{x:Bind Appearance.SmoothCursorShear, Mode=TwoWay}"
                                   Style="{StaticResource ToggleSwitchInExpanderStyle}" />
-                    <local:SettingResetButton SettingName="CursorGlideShear"
+                    <local:SettingResetButton SettingName="SmoothCursorShear"
                                               Target="{x:Bind Appearance}" />
                 </StackPanel>
             </local:SettingsCard>
 
-            <!--  Cursor Glide Speed  -->
-            <local:SettingsCard x:Name="CursorGlideSpeed"
-                                x:Uid="Profile_CursorGlideSpeed"
+            <!--  Smooth Cursor Duration  -->
+            <local:SettingsCard x:Name="SmoothCursorDuration"
+                                x:Uid="Profile_SmoothCursorDuration"
                                 Margin="0,4,0,0"
                                 Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
                 <Grid Style="{StaticResource CustomSliderControlGridStyle}">
@@ -660,17 +660,17 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Slider x:Name="CursorGlideSpeedSlider"
+                    <Slider x:Name="SmoothCursorDurationSlider"
                             Grid.Column="0"
-                            Maximum="100"
-                            Minimum="1"
-                            Value="{x:Bind Appearance.CursorGlideSpeed, Mode=TwoWay}" />
+                            Maximum="500"
+                            Minimum="10"
+                            Value="{x:Bind Appearance.SmoothCursorDuration, Mode=TwoWay}" />
                     <TextBlock Grid.Column="1"
                                Style="{StaticResource SliderValueLabelStyle}"
-                               Text="{Binding ElementName=CursorGlideSpeedSlider, Path=Value, Mode=OneWay}" />
+                               Text="{Binding ElementName=SmoothCursorDurationSlider, Path=Value, Mode=OneWay}" />
                     <local:SettingResetButton Grid.Column="2"
                                               Margin="8,0,0,0"
-                                              SettingName="CursorGlideSpeed"
+                                              SettingName="SmoothCursorDuration"
                                               Target="{x:Bind Appearance}" />
                 </Grid>
             </local:SettingsCard>
