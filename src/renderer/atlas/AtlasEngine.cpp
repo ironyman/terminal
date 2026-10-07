@@ -338,12 +338,6 @@ CATCH_RETURN()
 // Returns true if the spring is still moving.
 static bool stepSpring(f32& position, f32& velocity, f32 dt, f32 animationLength) noexcept
 {
-    if (animationLength <= dt)
-    {
-        position = 0;
-        velocity = 0;
-        return false;
-    }
     if (position == 0)
     {
         return false;
@@ -351,8 +345,10 @@ static bool stepSpring(f32& position, f32& velocity, f32 dt, f32 animationLength
 
     // < 1 underdamped, 1 critically damped, > 1 overdamped
     static constexpr f32 zeta = 1.0f;
-    // omega is chosen such that the destination is reached with a 2% tolerance within animationLength.
-    const auto omega = 4.0f / (zeta * animationLength);
+    // omega is chosen such that less than 0.5% of the distance is left once animationLength has passed
+    // ((1 + 8) * e^-8 = 0.3% when starting at rest). The caller snaps the cursor onto its destination
+    // at that point, which makes every motion take exactly animationLength.
+    const auto omega = 8.0f / (zeta * animationLength);
 
     // The analytical solution of a critically damped harmonic oscillator.
     // a and b are the initial conditions, obtained by setting dt to zero and solving for position and velocity.
@@ -386,10 +382,19 @@ void AtlasEngine::_stepSmoothCursor() noexcept
     for (size_t i = 0; i < 4; ++i)
     {
         auto& corner = _smooth.corners[i];
+        corner.elapsed += dt;
+        const auto arrived = corner.elapsed >= corner.animationLength;
         for (size_t axis = 0; axis < 2; ++axis)
         {
             auto& spring = corner.spring[axis];
-            animating |= stepSpring(spring.position, spring.velocity, dt, corner.animationLength);
+            if (arrived)
+            {
+                spring = {};
+            }
+            else
+            {
+                animating |= stepSpring(spring.position, spring.velocity, dt, corner.animationLength);
+            }
             corner.current[axis] = static_cast<f32>(_smooth.target[i * 2 + axis]) - spring.position;
         }
     }
@@ -402,15 +407,11 @@ void AtlasEngine::_stepSmoothCursor() noexcept
 // Then it turns the distance each corner still has to travel into the offset of its springs.
 void AtlasEngine::_retargetSmoothCursor(const std::array<i32, 8>& target) noexcept
 {
-    // The time (in seconds) the slowest corner takes to arrive.
+    // The time (in seconds) the slowest corner takes to arrive. Every motion, no matter how
+    // short or long, takes this long. The speed follows from the distance that has to be covered.
     const auto animationLength = static_cast<f32>(_p.s->cursor->smoothDuration) * 0.001f;
-    // Jumps of at most 2 columns (typically when typing) use this length, if it's shorter.
-    static constexpr f32 shortAnimationLength = 0.04f;
     // 1 = The leading corners arrive immediately (maximum shear). 0 = All corners take equally long (no shear).
     const auto trailSize = _smooth.stretch ? 1.0f : 0.0f;
-
-    const auto width = std::max(static_cast<f32>(target[2] - target[0]), 1.0f);
-    const auto height = std::max(static_cast<f32>(target[5] - target[3]), 1.0f);
 
     // The corners' offsets from the center of the cursor, normalized: (-1,-1), (1,-1), (1,1), (-1,1).
     static constexpr f32 sqrtHalf = 0.70710678f;
@@ -437,21 +438,12 @@ void AtlasEngine::_retargetSmoothCursor(const std::array<i32, 8>& target) noexce
     for (size_t i = 0; i < 4; ++i)
     {
         auto& corner = _smooth.corners[i];
-        const auto jumpX = (static_cast<f32>(target[i * 2 + 0]) - corner.previousDestination[0]) / width;
-        const auto jumpY = (static_cast<f32>(target[i * 2 + 1]) - corner.previousDestination[1]) / height;
-
-        if (std::abs(jumpX) <= 2.001f && std::abs(jumpY) <= 0.001f)
-        {
-            corner.animationLength = std::min(animationLength, shortAnimationLength);
-        }
-        else
-        {
-            auto normalized = (alignment[i] - minAlignment) / alignmentRange;
-            normalized = std::isfinite(normalized) ? std::clamp(normalized, 0.0f, 1.0f) : 1.0f;
-            const auto leading = animationLength * std::clamp(1.0f - trailSize, 0.0f, 1.0f);
-            const auto trailing = animationLength;
-            corner.animationLength = trailing + (leading - trailing) * normalized;
-        }
+        auto normalized = (alignment[i] - minAlignment) / alignmentRange;
+        normalized = std::isfinite(normalized) ? std::clamp(normalized, 0.0f, 1.0f) : 1.0f;
+        const auto leading = animationLength * std::clamp(1.0f - trailSize, 0.0f, 1.0f);
+        const auto trailing = animationLength;
+        corner.animationLength = trailing + (leading - trailing) * normalized;
+        corner.elapsed = 0;
 
         // The spring offset is the distance that's left to travel. Its velocity is retained,
         // which is what makes the cursor change course smoothly if it's retargeted midway.

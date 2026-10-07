@@ -155,8 +155,10 @@ namespace Microsoft::Console::Render::Atlas
                 std::array<f32, 2> current{};
                 std::array<f32, 2> previousDestination{};
                 std::array<Spring, 2> spring{};
-                // How long (in seconds) the corner takes to reach its destination (within 2%).
+                // How long (in seconds) the corner takes to reach its destination.
                 f32 animationLength = 0;
+                // How long (in seconds) the corner has been moving towards its destination.
+                f32 elapsed = 0;
             };
             // Corners are ordered top-left, top-right, bottom-right, bottom-left.
             std::array<Corner, 4> corners{};
