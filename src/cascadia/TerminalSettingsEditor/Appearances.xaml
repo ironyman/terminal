@@ -621,6 +621,60 @@
                 </Grid>
             </local:SettingsCard>
 
+            <!--  Cursor Glide  -->
+            <local:SettingsCard x:Name="CursorGlide"
+                                x:Uid="Profile_CursorGlide"
+                                Margin="0,4,0,0"
+                                Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
+                <StackPanel Style="{StaticResource SettingControlStackStyle}">
+                    <ToggleSwitch VerticalAlignment="Center"
+                                  IsOn="{x:Bind Appearance.CursorGlide, Mode=TwoWay}"
+                                  Style="{StaticResource ToggleSwitchInExpanderStyle}" />
+                    <local:SettingResetButton SettingName="CursorGlide"
+                                              Target="{x:Bind Appearance}" />
+                </StackPanel>
+            </local:SettingsCard>
+
+            <!--  Cursor Glide Shear  -->
+            <local:SettingsCard x:Name="CursorGlideShear"
+                                x:Uid="Profile_CursorGlideShear"
+                                Margin="0,4,0,0"
+                                Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
+                <StackPanel Style="{StaticResource SettingControlStackStyle}">
+                    <ToggleSwitch VerticalAlignment="Center"
+                                  IsOn="{x:Bind Appearance.CursorGlideShear, Mode=TwoWay}"
+                                  Style="{StaticResource ToggleSwitchInExpanderStyle}" />
+                    <local:SettingResetButton SettingName="CursorGlideShear"
+                                              Target="{x:Bind Appearance}" />
+                </StackPanel>
+            </local:SettingsCard>
+
+            <!--  Cursor Glide Speed  -->
+            <local:SettingsCard x:Name="CursorGlideSpeed"
+                                x:Uid="Profile_CursorGlideSpeed"
+                                Margin="0,4,0,0"
+                                Style="{StaticResource ExpanderAlignedSettingsCardStyle}">
+                <Grid Style="{StaticResource CustomSliderControlGridStyle}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="CursorGlideSpeedSlider"
+                            Grid.Column="0"
+                            Maximum="100"
+                            Minimum="1"
+                            Value="{x:Bind Appearance.CursorGlideSpeed, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="1"
+                               Style="{StaticResource SliderValueLabelStyle}"
+                               Text="{Binding ElementName=CursorGlideSpeedSlider, Path=Value, Mode=OneWay}" />
+                    <local:SettingResetButton Grid.Column="2"
+                                              Margin="8,0,0,0"
+                                              SettingName="CursorGlideSpeed"
+                                              Target="{x:Bind Appearance}" />
+                </Grid>
+            </local:SettingsCard>
+
             <!--  Cursor Color  -->
             <local:SettingsExpander x:Name="CursorColor"
                                     x:Uid="Profile_CursorColor"

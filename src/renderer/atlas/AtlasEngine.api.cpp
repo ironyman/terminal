@@ -424,6 +424,32 @@ void AtlasEngine::SetRetroTerminalEffect(bool enable) noexcept
     }
 }
 
+void AtlasEngine::SetCursorGlide(bool enable) noexcept
+{
+    if ((_api.s->cursor->glide != 0) != enable)
+    {
+        _api.s.write()->cursor.write()->glide = enable ? 1 : 0;
+    }
+}
+
+void AtlasEngine::SetCursorGlideShear(bool enable) noexcept
+{
+    if ((_api.s->cursor->glideShear != 0) != enable)
+    {
+        _api.s.write()->cursor.write()->glideShear = enable ? 1 : 0;
+    }
+}
+
+void AtlasEngine::SetCursorGlideSpeed(uint32_t percent) noexcept
+{
+    // The speed is a percentage between 33 (slowest) and 100 (nearly instant).
+    percent = std::clamp(percent, 33u, 100u);
+    if (_api.s->cursor->glideSpeed != percent)
+    {
+        _api.s.write()->cursor.write()->glideSpeed = percent;
+    }
+}
+
 void AtlasEngine::SetSoftwareRendering(bool enable) noexcept
 {
     if (_api.s->target->useWARP != enable)

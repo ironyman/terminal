@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <array>
+#include <chrono>
+
 #include <dwrite_3.h>
 #include <d3d11_2.h>
 #include <dxgi1_3.h>
@@ -71,6 +74,9 @@ namespace Microsoft::Console::Render::Atlas
         void SetPixelShaderPath(std::wstring_view value) noexcept;
         void SetPixelShaderImagePath(std::wstring_view value) noexcept;
         void SetRetroTerminalEffect(bool enable) noexcept;
+        void SetCursorGlide(bool enable) noexcept;
+        void SetCursorGlideShear(bool enable) noexcept;
+        void SetCursorGlideSpeed(uint32_t percent) noexcept;
         void SetSoftwareRendering(bool enable) noexcept;
         void SetDisablePartialInvalidation(bool enable) noexcept;
         void SetGraphicsAPI(GraphicsAPI graphicsAPI) noexcept;
@@ -125,6 +131,37 @@ namespace Microsoft::Console::Render::Atlas
 
         std::unique_ptr<IBackend> _b;
         RenderingPayload _p;
+
+        // The state of the "glide" cursor animation (similar to Neovide's smooth cursor).
+        // Each of the 4 corners of the cursor's cell box chases its target with its own speed.
+        // If shearing is enabled, the corners are ranked by how well they line up with the direction
+        // of travel: Leading corners are fast, trailing ones are slow. This stretches and shears
+        // the cursor while it moves and makes it contract again once it arrives.
+        // Otherwise all corners use the same speed and the cursor just slides.
+        // This is only accessed by the thread that calls StartPaint(), PaintCursor(), etc.
+        struct CursorGlide
+        {
+            // Corners are ordered top-left, top-right, bottom-right, bottom-left (x, y in pixel).
+            std::array<f32, 8> corners{};
+            std::array<i32, 8> target{};
+            // How long (in seconds) each corner takes to cover about two thirds of the distance to its target.
+            std::array<f32, 4> lag{};
+            u16x2 cellSize{};
+            std::chrono::steady_clock::time_point lastStep;
+            // True if corners contains a meaningful value.
+            bool valid = false;
+            // True if the corners haven't reached their target yet.
+            bool active = false;
+            // True if the corners lag behind individually (shear) while the cursor moves.
+            bool stretch = false;
+            // True if PaintCursor() was called during the current frame.
+            bool painted = false;
+            // The area of the glide cursor that has been drawn during the last frame.
+            // It needs to be repainted during the next frame (empty if nothing was drawn).
+            i32r drawn{};
+        } _glide;
+        void _stepCursorGlide() noexcept;
+        void _retargetCursorGlide(const std::array<i32, 8>& target) noexcept;
 
         struct ApiState
         {

@@ -171,6 +171,9 @@ namespace winrt::Microsoft::Terminal::Settings::Editor::implementation
     CUSTOM(FontAxes)                                                       \
     CUSTOM(FontFeatures)                                                   \
     PROJECTED(_appearance, RetroTerminalEffect)                            \
+    PROJECTED(_appearance, CursorGlide)                                    \
+    PROJECTED(_appearance, CursorGlideShear)                               \
+    PROJECTED(_appearance, CursorGlideSpeed)                               \
     PROJECTED(_appearance, CursorShape)                                    \
     PROJECTED(_appearance, CursorHeight)                                   \
     PROJECTED(_appearance, DarkColorSchemeName)                            \

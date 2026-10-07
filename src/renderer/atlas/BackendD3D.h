@@ -77,6 +77,8 @@ namespace Microsoft::Console::Render::Atlas
 
             Cursor,
             FilledRect,
+            // A quad with 4 individually positioned corners (used for the gliding block cursor).
+            CursorQuad,
 
             TextDrawingFirst = TextGrayscale,
             TextDrawingLast = SolidLine,

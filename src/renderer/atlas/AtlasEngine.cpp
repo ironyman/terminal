@@ -4,6 +4,9 @@
 #include "pch.h"
 #include "AtlasEngine.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include <til/unicode.h>
 
 #include "Backend.h"
@@ -139,8 +142,36 @@ try
     };
     _p.invalidatedRows = _api.invalidatedRows;
     _p.cursorRect = {};
+    _p.cursorGlide = false;
+    _p.cursorGlideRect = {};
+    _p.cursorGlideStretch = false;
     _p.scrollOffsetX = _api.viewportOffset.x;
     _p.scrollDeltaY = _api.scrollOffset;
+
+    if (_glide.valid && !_p.s->cursor->glide)
+    {
+        _glide.valid = false;
+        _glide.active = false;
+    }
+    if (_glide.active)
+    {
+        _stepCursorGlide();
+    }
+    if (_glide.drawn.non_empty())
+    {
+        // The glide cursor was drawn during the previous frame and is now somewhere else (or gone).
+        // We need to repaint the area it used to cover. The text and background are redrawn from
+        // scratch every frame, so we only need to widen the area that's being presented.
+        const auto offsetInPx = _p.scrollDeltaY * _p.s->font->cellSize.y;
+        for (const auto dy : { 0, offsetInPx })
+        {
+            _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _glide.drawn.left);
+            _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _glide.drawn.top + dy);
+            _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _glide.drawn.right);
+            _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _glide.drawn.bottom + dy);
+        }
+        _glide.drawn = {};
+    }
 
     // This if condition serves 2 purposes:
     // * By setting top/bottom to the full height we ensure that we call Present() without
@@ -285,12 +316,115 @@ try
         _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, r.bottom * _p.s->font->cellSize.y);
     }
 
+    // If the cursor wasn't painted (because it's hidden, for instance) it'll reappear
+    // at its new position without any animation, instead of gliding in from afar.
+    if (!_glide.painted)
+    {
+        _glide.valid = false;
+        _glide.active = false;
+    }
+    _glide.painted = false;
+
     _api.invalidatedCursorArea = invalidatedAreaNone;
     _api.invalidatedRows = invalidatedRowsNone;
     _api.scrollOffset = 0;
     return S_OK;
 }
 CATCH_RETURN()
+
+void AtlasEngine::_stepCursorGlide() noexcept
+{
+    // Stops us from teleporting if we haven't rendered in a while (e.g. due to a hidden window).
+    static constexpr f32 maxStep = 0.05f;
+
+    const auto now = std::chrono::steady_clock::now();
+    const auto dt = std::min(std::chrono::duration<f32>(now - _glide.lastStep).count(), maxStep);
+    _glide.lastStep = now;
+
+    // The user's speed setting (33 to 100 percent) just makes time pass faster or slower for the animation.
+    // 50% is the neutral speed (1x). Below that it slows down to about 0.6x at 33%. Above it speeds up to 40x at 100%,
+    // which takes about 3ms for the slowest corner and is as good as instant. Both halves are exponential,
+    // so that equal steps of the setting feel like equal steps in speed.
+    const auto percent = static_cast<f32>(_p.s->cursor->glideSpeed);
+    const auto speed = percent >= 50.0f ? std::pow(40.0f, (percent - 50.0f) / 50.0f) : std::pow(0.25f, (50.0f - percent) / 50.0f);
+    auto settled = true;
+
+    for (size_t i = 0; i < 4; ++i)
+    {
+        const auto alpha = 1.0f - std::exp(-dt * speed / _glide.lag[i]);
+
+        for (size_t j = i * 2; j < i * 2 + 2; ++j)
+        {
+            const auto target = static_cast<f32>(_glide.target[j]);
+            _glide.corners[j] += (target - _glide.corners[j]) * alpha;
+            settled &= std::abs(target - _glide.corners[j]) < 0.5f;
+        }
+    }
+
+    if (settled)
+    {
+        for (size_t i = 0; i < 8; ++i)
+        {
+            _glide.corners[i] = static_cast<f32>(_glide.target[i]);
+        }
+        _glide.active = false;
+    }
+}
+
+// Assigns each corner how much it lags behind on its way to the target, depending on the direction we're heading.
+void AtlasEngine::_retargetCursorGlide(const std::array<i32, 8>& target) noexcept
+{
+    // How long (in seconds) a corner takes to cover about two thirds of the distance to its target.
+    // A smaller lag means a faster corner. The leading corner of a shearing cursor has the smallest lag,
+    // the trailing one the largest. The ones in between are spread evenly.
+    static constexpr f32 leadingLag = 0.030f;
+    static constexpr f32 trailingLag = 0.120f;
+    // Cursors that don't shear just slide at a speed in between.
+    static constexpr f32 rigidLag = 0.050f;
+
+    if (!_glide.stretch)
+    {
+        _glide.lag = { rigidLag, rigidLag, rigidLag, rigidLag };
+        return;
+    }
+
+    // The direction we're heading in is that from the center of where the cursor is, to where it's going.
+    f32 currentX = 0, currentY = 0, targetX = 0, targetY = 0;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        currentX += _glide.corners[i * 2 + 0] * 0.25f;
+        currentY += _glide.corners[i * 2 + 1] * 0.25f;
+        targetX += static_cast<f32>(target[i * 2 + 0]) * 0.25f;
+        targetY += static_cast<f32>(target[i * 2 + 1]) * 0.25f;
+    }
+    const auto travelX = targetX - currentX;
+    const auto travelY = targetY - currentY;
+    const auto travelLength = std::sqrt(travelX * travelX + travelY * travelY);
+
+    // How much a corner points into the direction of travel (-1 to 1) just like in Neovide.
+    // The corners' offsets from the center are (-1,-1), (1,-1), (1,1), (-1,1), each normalized.
+    static constexpr f32 sqrtHalf = 0.70710678f;
+    static constexpr std::array<f32, 4> offsetX{ -sqrtHalf, sqrtHalf, sqrtHalf, -sqrtHalf };
+    static constexpr std::array<f32, 4> offsetY{ -sqrtHalf, -sqrtHalf, sqrtHalf, sqrtHalf };
+    std::array<f32, 4> alignment{};
+    if (travelLength > 0.001f)
+    {
+        for (size_t i = 0; i < 4; ++i)
+        {
+            alignment[i] = (offsetX[i] * travelX + offsetY[i] * travelY) / travelLength;
+        }
+    }
+
+    // Rank the corners from the most to the least aligned one. Corners that are equally aligned
+    // (e.g. both leading corners while moving right) still end up with different ranks and thus
+    // different speeds. This is what makes the cursor shear, instead of just stretching.
+    std::array<size_t, 4> order{ 0, 1, 2, 3 };
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return alignment[a] > alignment[b]; });
+    for (size_t rank = 0; rank < 4; ++rank)
+    {
+        _glide.lag[order[rank]] = leadingLag + (trailingLag - leadingLag) * (static_cast<f32>(rank) / 3.0f);
+    }
+}
 
 [[nodiscard]] HRESULT AtlasEngine::ScrollFrame() noexcept
 {
@@ -615,6 +749,9 @@ try
             .cursorColor = gsl::narrow_cast<u32>(options.fUseColor ? options.cursorColor | 0xff000000 : INVALID_COLOR),
             .cursorType = gsl::narrow_cast<u16>(options.cursorType),
             .heightPercentage = gsl::narrow_cast<u16>(options.ulCursorHeightPercent),
+            .glide = _api.s->cursor->glide,
+            .glideShear = _api.s->cursor->glideShear,
+            .glideSpeed = _api.s->cursor->glideSpeed,
         };
         if (*_api.s->cursor != cachedOptions)
         {
@@ -649,6 +786,75 @@ try
             _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, right * _p.s->font->cellSize.x);
             _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, bottom * _p.s->font->cellSize.y);
         }
+    }
+
+    _glide.painted = true;
+
+    if (options.isOn && _p.cursorRect && _p.s->cursor->glide)
+    {
+        const auto cellSize = _p.s->font->cellSize;
+        const auto l = _p.cursorRect.left * cellSize.x;
+        const auto t = _p.cursorRect.top * cellSize.y;
+        const auto r = _p.cursorRect.right * cellSize.x;
+        const auto b = _p.cursorRect.bottom * cellSize.y;
+        // top-left, top-right, bottom-right, bottom-left
+        const std::array<i32, 8> target{ l, t, r, t, r, b, l, b };
+
+        // Whether the corners lag behind individually (= shear) is up to the user.
+        _glide.stretch = _p.s->cursor->glideShear != 0;
+
+        if (!_glide.valid || _glide.cellSize != cellSize)
+        {
+            // Start (or restart) at the target without animating.
+            for (size_t i = 0; i < 8; ++i)
+            {
+                _glide.corners[i] = static_cast<f32>(target[i]);
+            }
+            _glide.target = target;
+            _glide.cellSize = cellSize;
+            _glide.valid = true;
+            _glide.active = false;
+        }
+        else if (_glide.target != target)
+        {
+            _retargetCursorGlide(target);
+            _glide.target = target;
+            _glide.lastStep = std::chrono::steady_clock::now();
+            _glide.active = true;
+        }
+
+        std::array<i32, 8> c;
+        for (size_t i = 0; i < 8; ++i)
+        {
+            c[i] = static_cast<i32>(std::lround(_glide.corners[i]));
+        }
+
+        // The quad is described by its bounding box and how far the corners are shifted away from it:
+        // The bounding box's left edge is formed by the top-left/bottom-left corners, its right edge by
+        // the top-right/bottom-right ones, and so on (see BackendD3D::_drawCursorBackground).
+        _p.cursorGlide = true;
+        _p.cursorGlideRect = {
+            std::min(c[0], c[6]),
+            std::min(c[1], c[3]),
+            std::max(c[2], c[4]),
+            std::max(c[5], c[7]),
+        };
+        _p.cursorGlideStretch = _glide.stretch;
+        _p.cursorGlideCorners = c;
+
+        // Make sure we also repaint everything the quad might touch (including its anti-aliased edges),
+        // in case it isn't perfectly described by the bounding box above.
+        _glide.drawn = {
+            std::min({ c[0], c[2], c[4], c[6] }) - 1,
+            std::min({ c[1], c[3], c[5], c[7] }) - 1,
+            std::max({ c[0], c[2], c[4], c[6] }) + 1,
+            std::max({ c[1], c[3], c[5], c[7] }) + 1,
+        };
+
+        _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _glide.drawn.left);
+        _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _glide.drawn.top);
+        _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _glide.drawn.right);
+        _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _glide.drawn.bottom);
     }
 
     return S_OK;

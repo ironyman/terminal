@@ -282,6 +282,23 @@
           "description": "When set to true, enable retro terminal effects when unfocused. This is an experimental feature, and its continued existence is not guaranteed.",
           "type": "boolean"
         },
+        "experimental.cursorGlide": {
+          "description": "When set to true, the cursor glides smoothly between cells instead of jumping, similar to Neovide. Works with every cursor shape. See `experimental.cursorGlideShear` for a stretching and shearing effect. Requires the Direct3D graphics API. This is an experimental feature, and its continued existence is not guaranteed.",
+          "type": "boolean",
+          "default": false
+        },
+        "experimental.cursorGlideShear": {
+          "description": "When set to true, each corner of the gliding cursor lags behind separately, so that it stretches and shears while it moves. Works with every cursor shape. Requires `experimental.cursorGlide`. This is an experimental feature, and its continued existence is not guaranteed.",
+          "type": "boolean",
+          "default": false
+        },
+        "experimental.cursorGlideSpeed": {
+          "description": "Sets how fast the gliding cursor moves, in percent. Higher values are faster. 100 is nearly instant and 50 is the default. Accepts values from 33-100. Requires `experimental.cursorGlide`. This is an experimental feature, and its continued existence is not guaranteed.",
+          "maximum": 100,
+          "minimum": 33,
+          "type": "integer",
+          "default": 50
+        },
         "experimental.pixelShaderPath": {
           "description": "Use to set a path to a pixel shader to use with the Terminal when unfocused. Overrides `experimental.retroTerminalEffect`. This is an experimental feature, and its continued existence is not guaranteed.",
           "type": "string"

@@ -1142,6 +1142,30 @@
     <value>Show retro-style terminal effects such as glowing text and scan lines.</value>
     <comment>A description for what the "retro terminal effects" setting does. Presented near "Profile_RetroTerminalEffect". "Retro" is a common English prefix that suggests a nostalgic, dated appearance.</comment>
   </data>
+  <data name="Profile_CursorGlide.Header" xml:space="preserve">
+    <value>Glide cursor</value>
+    <comment>Header for a control to toggle a smooth cursor animation, where the cursor glides between cells instead of jumping.</comment>
+  </data>
+  <data name="Profile_CursorGlide.Description" xml:space="preserve">
+    <value>Animate the cursor smoothly as it moves, instead of jumping from cell to cell. Requires the Direct3D graphics API.</value>
+    <comment>A description for what the "glide cursor" setting does. Presented near "Profile_CursorGlide".</comment>
+  </data>
+  <data name="Profile_CursorGlideShear.Header" xml:space="preserve">
+    <value>Shear glide cursor</value>
+    <comment>Header for a control to toggle a stretching and shearing effect of the gliding cursor, where each corner of the cursor lags behind separately.</comment>
+  </data>
+  <data name="Profile_CursorGlideShear.Description" xml:space="preserve">
+    <value>Let each corner of the gliding cursor lag behind separately, so that it stretches and shears while it moves. Requires "Glide cursor".</value>
+    <comment>A description for what the "shear glide cursor" setting does. Presented near "Profile_CursorGlideShear". "Glide cursor" refers to the setting "Profile_CursorGlide".</comment>
+  </data>
+  <data name="Profile_CursorGlideSpeed.Header" xml:space="preserve">
+    <value>Glide cursor speed</value>
+    <comment>Header for a control to determine how fast the gliding cursor moves.</comment>
+  </data>
+  <data name="Profile_CursorGlideSpeed.Description" xml:space="preserve">
+    <value>Sets how fast the glide cursor moves, in percent. Higher values are faster. 100 is nearly instant and 50 is the default. Requires "Glide cursor".</value>
+    <comment>A description for what the "glide cursor speed" setting does. Presented near "Profile_CursorGlideSpeed". "Glide cursor" refers to the setting "Profile_CursorGlide".</comment>
+  </data>
   <data name="Profile_AdjustIndistinguishableColors.Header" xml:space="preserve">
     <value>Automatically adjust lightness of indistinguishable text</value>
     <comment>Header for a control to toggle if we should adjust the foreground color's lightness to make it more visible when necessary, based on the background color.</comment>
