@@ -284,6 +284,9 @@ namespace winrt::Microsoft::Terminal::Settings
         std::tie(_BackgroundImageHorizontalAlignment, _BackgroundImageVerticalAlignment) = ConvertConvergedAlignment(appearance.BackgroundImageAlignment());
 
         _RetroTerminalEffect = appearance.RetroTerminalEffect();
+        _CursorGlide = appearance.CursorGlide();
+        _CursorGlideShear = appearance.CursorGlideShear();
+        _CursorGlideSpeed = appearance.CursorGlideSpeed();
 
         _IntenseIsBold = WI_IsFlagSet(appearance.IntenseTextStyle(), Microsoft::Terminal::Settings::Model::IntenseStyle::Bold);
         _IntenseIsBright = WI_IsFlagSet(appearance.IntenseTextStyle(), Microsoft::Terminal::Settings::Model::IntenseStyle::Bright);

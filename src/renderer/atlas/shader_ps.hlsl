@@ -209,6 +209,32 @@ Output main(PSData data) : SV_Target
         weights = color.aaaa;
         break;
     }
+    case SHADING_TYPE_CURSOR_QUAD:
+    {
+        // data.texcoord is our position relative to the top-left of the instance (see the vertex shader).
+        float2 p = data.texcoord;
+        float2 c[4] = { data.corners0.xy, data.corners0.zw, data.corners1.xy, data.corners1.zw };
+
+        // The corners are ordered clockwise (on screen). Inside the quad the distance to each edge is positive.
+        float distance = 1000.0f;
+        [unroll]
+        for (int i = 0; i < 4; ++i)
+        {
+            float2 a = c[i];
+            float2 e = c[(i + 1) & 3] - a;
+            float len = length(e);
+            if (len > 0.001f)
+            {
+                distance = min(distance, (e.x * (p.y - a.y) - e.y * (p.x - a.x)) / len);
+            }
+        }
+
+        // The distance of a pixel's center to an edge is 0.5 if the pixel is just fully inside. This results in anti-aliased edges.
+        float a = saturate(distance + 0.5f);
+        color = a * premultiplyColor(data.color);
+        weights = color.aaaa;
+        break;
+    }
     default:
     {
         color = premultiplyColor(data.color);

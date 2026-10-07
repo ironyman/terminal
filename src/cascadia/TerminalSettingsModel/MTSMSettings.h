@@ -148,6 +148,9 @@ Author(s):
     X(float, BackgroundImageOpacity, "backgroundImageOpacity", 1.0f)                                                                                               \
     X(winrt::Windows::UI::Xaml::Media::Stretch, BackgroundImageStretchMode, "backgroundImageStretchMode", winrt::Windows::UI::Xaml::Media::Stretch::UniformToFill) \
     X(bool, RetroTerminalEffect, "experimental.retroTerminalEffect", false)                                                                                        \
+    X(bool, CursorGlide, "experimental.cursorGlide", false)                                                                                                        \
+    X(bool, CursorGlideShear, "experimental.cursorGlideShear", false)                                                                                              \
+    X(uint32_t, CursorGlideSpeed, "experimental.cursorGlideSpeed", 50)                                                                                            \
     X(IMediaResource, PixelShaderPath, "experimental.pixelShaderPath", implementation::MediaResource::Empty())                                                     \
     X(IMediaResource, PixelShaderImagePath, "experimental.pixelShaderImagePath", implementation::MediaResource::Empty())                                           \
     X(ConvergedAlignment, BackgroundImageAlignment, "backgroundImageAlignment", ConvergedAlignment::Horizontal_Center | ConvergedAlignment::Vertical_Center)       \

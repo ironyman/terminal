@@ -27,6 +27,9 @@
     X(winrt::Windows::UI::Xaml::HorizontalAlignment, BackgroundImageHorizontalAlignment, winrt::Windows::UI::Xaml::HorizontalAlignment::Center) \
     X(winrt::Windows::UI::Xaml::VerticalAlignment, BackgroundImageVerticalAlignment, winrt::Windows::UI::Xaml::VerticalAlignment::Center)       \
     X(bool, RetroTerminalEffect, false)                                                                                                         \
+    X(bool, CursorGlide, false)                                                                                                                 \
+    X(bool, CursorGlideShear, false)                                                                                                            \
+    X(uint32_t, CursorGlideSpeed, 50)                                                                                                       \
     X(winrt::hstring, PixelShaderPath)                                                                                                          \
     X(winrt::hstring, PixelShaderImagePath)
 

@@ -17,6 +17,7 @@
 #define SHADING_TYPE_SOLID_LINE         8
 #define SHADING_TYPE_CURSOR             9
 #define SHADING_TYPE_FILLED_RECT       10
+#define SHADING_TYPE_CURSOR_QUAD       11
 
 struct VSData
 {
@@ -36,6 +37,10 @@ struct PSData
     nointerpolation uint shadingType : shadingType;
     nointerpolation float2 renditionScale : renditionScale;
     nointerpolation float4 color : color;
+    // Only used by SHADING_TYPE_CURSOR_QUAD: The 4 corners (top-left, top-right, bottom-right, bottom-left)
+    // of the quad relative to the top-left of the instance. (x0, y0, x1, y1) and (x2, y2, x3, y3).
+    nointerpolation float4 corners0 : corners0;
+    nointerpolation float4 corners1 : corners1;
 };
 
 float4 premultiplyColor(float4 color)
