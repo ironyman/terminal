@@ -85,7 +85,7 @@ CATCH_RETURN()
 
 [[nodiscard]] bool AtlasEngine::RequiresContinuousRedraw() noexcept
 {
-    return ATLAS_DEBUG_CONTINUOUS_REDRAW || _smooth.active || (_b && _b->RequiresContinuousRedraw());
+    return ATLAS_DEBUG_CONTINUOUS_REDRAW || _smooth.Active() || (_b && _b->RequiresContinuousRedraw());
 }
 
 bool AtlasEngine::WaitUntilCanRender(HANDLE shutdownEvent) noexcept

@@ -4,10 +4,6 @@
 #include "pch.h"
 #include "AtlasEngine.h"
 
-#include <algorithm>
-#include <cmath>
-#include <limits>
-
 #include <til/unicode.h>
 
 #include "Backend.h"
@@ -143,22 +139,19 @@ try
     };
     _p.invalidatedRows = _api.invalidatedRows;
     _p.cursorRect = {};
-    _p.smoothCursor = false;
-    _p.smoothCursorRect = {};
-    _p.smoothCursorStretch = false;
+    _p.smoothCursor = {};
     _p.scrollOffsetX = _api.viewportOffset.x;
     _p.scrollDeltaY = _api.scrollOffset;
 
-    if (_smooth.valid && !_p.s->cursor->smooth)
+    if (!_p.s->cursor->smooth)
     {
-        _smooth.valid = false;
-        _smooth.active = false;
+        _smooth.Reset();
     }
-    if (_smooth.active)
+    if (_smooth.Active())
     {
-        _stepSmoothCursor();
+        _smooth.Step();
     }
-    if (_smooth.drawn.non_empty())
+    if (_smoothDrawn.non_empty())
     {
         // The smooth cursor was drawn during the previous frame and is now somewhere else (or gone).
         // We need to repaint the area it used to cover. The text and background are redrawn from
@@ -166,12 +159,12 @@ try
         const auto offsetInPx = _p.scrollDeltaY * _p.s->font->cellSize.y;
         for (const auto dy : { 0, offsetInPx })
         {
-            _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smooth.drawn.left);
-            _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smooth.drawn.top + dy);
-            _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smooth.drawn.right);
-            _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smooth.drawn.bottom + dy);
+            _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothDrawn.left);
+            _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothDrawn.top + dy);
+            _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothDrawn.right);
+            _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothDrawn.bottom + dy);
         }
-        _smooth.drawn = {};
+        _smoothDrawn = {};
     }
 
     // This if condition serves 2 purposes:
@@ -319,12 +312,11 @@ try
 
     // If the cursor wasn't painted (because it's hidden, for instance) it'll reappear
     // at its new position without any animation, instead of animating in from afar.
-    if (!_smooth.painted)
+    if (!_smoothPainted)
     {
-        _smooth.valid = false;
-        _smooth.active = false;
+        _smooth.Reset();
     }
-    _smooth.painted = false;
+    _smoothPainted = false;
 
     _api.invalidatedCursorArea = invalidatedAreaNone;
     _api.invalidatedRows = invalidatedRowsNone;
@@ -332,140 +324,6 @@ try
     return S_OK;
 }
 CATCH_RETURN()
-
-// Simulates a critically damped spring (also known as a PD controller) just like Neovide does:
-// https://gdcvault.com/play/1027059/Math-In-Game-Development-Summit
-// Returns true if the spring is still moving.
-static bool stepSpring(f32& position, f32& velocity, f32 dt, f32 animationLength) noexcept
-{
-    if (animationLength <= dt)
-    {
-        position = 0;
-        velocity = 0;
-        return false;
-    }
-    if (position == 0)
-    {
-        return false;
-    }
-
-    // < 1 underdamped, 1 critically damped, > 1 overdamped
-    static constexpr f32 zeta = 1.0f;
-    // omega is chosen like in Neovide: About 9% of the distance is left once animationLength has passed
-    // ((1 + 4) * e^-4 when starting at rest). The spring keeps decaying until it's below 0.01 pixel.
-    const auto omega = 4.0f / (zeta * animationLength);
-
-    // The analytical solution of a critically damped harmonic oscillator.
-    // a and b are the initial conditions, obtained by setting dt to zero and solving for position and velocity.
-    const auto a = position;
-    const auto b = position * omega + velocity;
-    const auto c = std::exp(-omega * dt);
-
-    position = (a + b * dt) * c;
-    velocity = c * (-a * omega - b * dt * omega + b);
-
-    if (std::abs(position) < 0.01f)
-    {
-        position = 0;
-        velocity = 0;
-        return false;
-    }
-    return true;
-}
-
-void AtlasEngine::_stepSmoothCursor() noexcept
-{
-    // Stops us from teleporting if we haven't rendered in a while (e.g. due to a hidden window).
-    static constexpr f32 maxStep = 0.05f;
-
-    const auto now = std::chrono::steady_clock::now();
-    const auto dt = std::min(std::chrono::duration<f32>(now - _smooth.lastStep).count(), maxStep);
-    _smooth.lastStep = now;
-
-    auto animating = false;
-
-    for (size_t i = 0; i < 4; ++i)
-    {
-        auto& corner = _smooth.corners[i];
-        for (size_t axis = 0; axis < 2; ++axis)
-        {
-            auto& spring = corner.spring[axis];
-            animating |= stepSpring(spring.position, spring.velocity, dt, corner.animationLength);
-            corner.current[axis] = static_cast<f32>(_smooth.target[i * 2 + axis]) - spring.position;
-        }
-    }
-
-    _smooth.active = animating;
-}
-
-// Called when the destination of the cursor changes. Gives each corner an animation length,
-// depending on how much it lines up with the direction we're heading in (this is Neovide's Corner::jump).
-// Then it turns the distance each corner still has to travel into the offset of its springs.
-void AtlasEngine::_retargetSmoothCursor(const std::array<i32, 8>& target) noexcept
-{
-    // The time (in seconds) the slowest corner takes to get close to its destination.
-    const auto animationLength = static_cast<f32>(_p.s->cursor->smoothDuration) * 0.001f;
-    // Jumps of at most 2 columns within a row (typically when typing or holding a key) use this length,
-    // if it's shorter, so they feel snappy instead of smeared.
-    static constexpr f32 shortAnimationLength = 0.04f;
-    // 1 = The leading corners arrive immediately (maximum shear). 0 = All corners take equally long (no shear).
-    const auto trailSize = _smooth.stretch ? 1.0f : 0.0f;
-
-    // The size of the cursor's cell box, in which jumps are measured.
-    const auto width = std::max(static_cast<f32>(target[2] - target[0]), 1.0f);
-    const auto height = std::max(static_cast<f32>(target[5] - target[3]), 1.0f);
-
-    // The corners' offsets from the center of the cursor, normalized: (-1,-1), (1,-1), (1,1), (-1,1).
-    static constexpr f32 sqrtHalf = 0.70710678f;
-    static constexpr std::array<f32, 4> offsetX{ -sqrtHalf, sqrtHalf, sqrtHalf, -sqrtHalf };
-    static constexpr std::array<f32, 4> offsetY{ -sqrtHalf, -sqrtHalf, sqrtHalf, sqrtHalf };
-
-    // How much a corner points into the direction of travel (-1 to 1). Corners that lead move faster than those that trail.
-    // A corner that doesn't move (e.g. the top-left one when the cursor grows to the right) results in NaN.
-    std::array<f32, 4> alignment{};
-    auto minAlignment = std::numeric_limits<f32>::infinity();
-    auto maxAlignment = -std::numeric_limits<f32>::infinity();
-    for (size_t i = 0; i < 4; ++i)
-    {
-        const auto travelX = static_cast<f32>(target[i * 2 + 0]) - _smooth.corners[i].previousDestination[0];
-        const auto travelY = static_cast<f32>(target[i * 2 + 1]) - _smooth.corners[i].previousDestination[1];
-        const auto travelLength = std::sqrt(travelX * travelX + travelY * travelY);
-        alignment[i] = travelLength > 0.0f ? (offsetX[i] * travelX + offsetY[i] * travelY) / travelLength : std::numeric_limits<f32>::quiet_NaN();
-        // fmin/fmax ignore NaN.
-        minAlignment = std::fmin(minAlignment, alignment[i]);
-        maxAlignment = std::fmax(maxAlignment, alignment[i]);
-    }
-    const auto alignmentRange = maxAlignment - minAlignment;
-
-    for (size_t i = 0; i < 4; ++i)
-    {
-        auto& corner = _smooth.corners[i];
-        const auto jumpX = (static_cast<f32>(target[i * 2 + 0]) - corner.previousDestination[0]) / width;
-        const auto jumpY = (static_cast<f32>(target[i * 2 + 1]) - corner.previousDestination[1]) / height;
-
-        if (std::abs(jumpX) <= 2.001f && std::abs(jumpY) <= 0.001f)
-        {
-            corner.animationLength = std::min(animationLength, shortAnimationLength);
-        }
-        else
-        {
-            auto normalized = (alignment[i] - minAlignment) / alignmentRange;
-            normalized = std::isfinite(normalized) ? std::clamp(normalized, 0.0f, 1.0f) : 1.0f;
-            const auto leading = animationLength * std::clamp(1.0f - trailSize, 0.0f, 1.0f);
-            const auto trailing = animationLength;
-            corner.animationLength = trailing + (leading - trailing) * normalized;
-        }
-
-        // The spring offset is the distance that's left to travel. Its velocity is retained,
-        // which is what makes the cursor change course smoothly if it's retargeted midway.
-        for (size_t axis = 0; axis < 2; ++axis)
-        {
-            const auto destination = static_cast<f32>(target[i * 2 + axis]);
-            corner.spring[axis].position = destination - corner.current[axis];
-            corner.previousDestination[axis] = destination;
-        }
-    }
-}
 
 [[nodiscard]] HRESULT AtlasEngine::ScrollFrame() noexcept
 {
@@ -829,7 +687,7 @@ try
         }
     }
 
-    _smooth.painted = true;
+    _smoothPainted = true;
 
     if (options.isOn && _p.cursorRect && _p.s->cursor->smooth)
     {
@@ -841,72 +699,15 @@ try
         // top-left, top-right, bottom-right, bottom-left
         const std::array<i32, 8> target{ l, t, r, t, r, b, l, b };
 
-        // Whether the corners lag behind individually (= shear) is up to the user.
-        _smooth.stretch = _p.s->cursor->smoothShear != 0;
+        _smooth.MoveTo(target, cellSize, _p.s->cursor->smoothShear != 0, _p.s->cursor->smoothDuration);
+        _p.smoothCursor = _smooth.Frame();
 
-        if (!_smooth.valid || _smooth.cellSize != cellSize)
-        {
-            // Start (or restart) at the target without animating.
-            for (size_t i = 0; i < 4; ++i)
-            {
-                _smooth.corners[i] = {};
-                for (size_t axis = 0; axis < 2; ++axis)
-                {
-                    const auto destination = static_cast<f32>(target[i * 2 + axis]);
-                    _smooth.corners[i].current[axis] = destination;
-                    _smooth.corners[i].previousDestination[axis] = destination;
-                }
-            }
-            _smooth.target = target;
-            _smooth.cellSize = cellSize;
-            _smooth.valid = true;
-            _smooth.active = false;
-        }
-        else if (_smooth.target != target)
-        {
-            _retargetSmoothCursor(target);
-            _smooth.target = target;
-            _smooth.lastStep = std::chrono::steady_clock::now();
-            _smooth.active = true;
-            // Take the first step right away (with a dt of about zero). Corners that have an animation length
-            // of 0 (the leading ones, if shearing) snap to their destination, while the others stay behind.
-            // Otherwise this frame would still show the cursor at its old position, and the stretched
-            // cursor would only appear in the next frame, which cuts off the start of the trail.
-            _stepSmoothCursor();
-        }
-
-        std::array<i32, 8> c;
-        for (size_t i = 0; i < 8; ++i)
-        {
-            c[i] = static_cast<i32>(std::lround(_smooth.corners[i / 2].current[i % 2]));
-        }
-
-        // The quad is described by its bounding box and how far the corners are shifted away from it:
-        // The bounding box's left edge is formed by the top-left/bottom-left corners, its right edge by
-        // the top-right/bottom-right ones, and so on (see BackendD3D::_drawCursorBackground).
-        _p.smoothCursor = true;
-        _p.smoothCursorRect = {
-            std::min(c[0], c[6]),
-            std::min(c[1], c[3]),
-            std::max(c[2], c[4]),
-            std::max(c[5], c[7]),
-        };
-        _p.smoothCursorStretch = _smooth.stretch;
-        _p.smoothCursorCorners = c;
-
-        // Make sure we also repaint everything the quad might touch (including its anti-aliased edges),
-        // in case it isn't perfectly described by the bounding box above.
-        _smooth.drawn = {
-            std::min({ c[0], c[2], c[4], c[6] }) - 1,
-            std::min({ c[1], c[3], c[5], c[7] }) - 1,
-            std::max({ c[0], c[2], c[4], c[6] }) + 1,
-            std::max({ c[1], c[3], c[5], c[7] }) + 1,
-        };
-
-        _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smooth.drawn.left);
-        _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smooth.drawn.top);
-        _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smooth.drawn.right);
-        _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smooth.drawn.bottom);
+        // Make sure we also repaint everything the quad might touch, and remember to erase it in the next frame.
+        _smoothDrawn = _p.smoothCursor.damage;
+        _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothDrawn.left);
+        _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothDrawn.top);
+        _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothDrawn.right);
+        _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothDrawn.bottom);
     }
 
     return S_OK;

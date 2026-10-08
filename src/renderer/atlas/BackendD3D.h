@@ -7,6 +7,7 @@
 #include <til/flat_set.h>
 
 #include "Backend.h"
+#include "SmoothCursor.h"
 
 namespace Microsoft::Console::Render::Atlas
 {
@@ -218,14 +219,6 @@ namespace Microsoft::Console::Render::Atlas
         };
 
     private:
-        struct CursorRect
-        {
-            i16x2 position;
-            u16x2 size;
-            u32 background;
-            u32 foreground;
-        };
-
         ATLAS_ATTR_COLD void _handleSettingsUpdate(const RenderingPayload& p);
         void _updateFontDependents(const RenderingPayload& p);
         void _d2dRenderTargetUpdateFontSettings(const RenderingPayload& p) const noexcept;

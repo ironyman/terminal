@@ -2054,130 +2054,23 @@ void BackendD3D::_drawCursorBackground(const RenderingPayload& p)
         }
     }
 
-    if (p.smoothCursor && p.smoothCursorStretch && !_cursorRects.empty())
+    if (p.smoothCursor.enabled)
     {
-        // A smooth cursor with shear is a quad whose corners lag behind individually. The animated quad
-        // is that of the entire cell(s) the cursor is targeting (top-left, top-right, bottom-right, bottom-left).
-        // Every part of the cursor (a bar, an underscore, a block, ...) is a rectangle inside of that cell.
-        // We map the 4 corners of each part into the animated quad, which gives us a quad for each of them.
-        const auto& k = p.smoothCursorCorners;
-        const auto targetLeft = static_cast<f32>(_cursorPosition.left);
-        const auto targetTop = static_cast<f32>(_cursorPosition.top);
-        const auto targetWidth = static_cast<f32>(_cursorPosition.right - _cursorPosition.left);
-        const auto targetHeight = static_cast<f32>(_cursorPosition.bottom - _cursorPosition.top);
+        // The code above has laid out the cursor inside the cell(s) it's targeting.
+        // This maps it onto the animated cursor (see SmoothCursor.h).
+        til::small_vector<SmoothCursorQuad, 6> quads;
+        LayoutSmoothCursor(p.smoothCursor, _cursorRects, _cursorPosition, quads);
 
-        // Maps a position inside the cell (u and v are between 0 and 1) onto the animated quad.
-        const auto map = [&](f32 u, f32 v) {
-            const auto topX = static_cast<f32>(k[0]) + static_cast<f32>(k[2] - k[0]) * u;
-            const auto topY = static_cast<f32>(k[1]) + static_cast<f32>(k[3] - k[1]) * u;
-            const auto bottomX = static_cast<f32>(k[6]) + static_cast<f32>(k[4] - k[6]) * u;
-            const auto bottomY = static_cast<f32>(k[7]) + static_cast<f32>(k[5] - k[7]) * u;
-            return std::array<i32, 2>{
-                static_cast<i32>(std::lround(topX + (bottomX - topX) * v)),
-                static_cast<i32>(std::lround(topY + (bottomY - topY) * v)),
-            };
-        };
-        const auto shearByte = [](i32 v) { return static_cast<u16>(static_cast<u8>(std::clamp(v, -127, 127))); };
-
-        const auto parts = _cursorRects;
-        _cursorRects.clear();
-        til::rect bounds{ til::CoordTypeMax, til::CoordTypeMax, til::CoordTypeMin, til::CoordTypeMin };
-
-        for (const auto& part : parts)
+        for (const auto& q : quads)
         {
-            const auto u0 = (static_cast<f32>(part.position.x) - targetLeft) / targetWidth;
-            const auto u1 = (static_cast<f32>(part.position.x + part.size.x) - targetLeft) / targetWidth;
-            const auto v0 = (static_cast<f32>(part.position.y) - targetTop) / targetHeight;
-            const auto v1 = (static_cast<f32>(part.position.y + part.size.y) - targetTop) / targetHeight;
-            const auto tl = map(u0, v0);
-            const auto tr = map(u1, v0);
-            const auto br = map(u1, v1);
-            const auto bl = map(u0, v1);
-
-            // The quad is described by its bounding box and how far the corners are shifted away from it:
-            // The left edge of the box is formed by the top-left/bottom-left corners, the right edge by the
-            // top-right/bottom-right ones, the top edge by the top-left/top-right ones, and so on.
-            const auto left = std::min(tl[0], bl[0]);
-            const auto top = std::min(tl[1], tr[1]);
-            const auto right = std::max(tr[0], br[0]);
-            const auto bottom = std::max(bl[1], br[1]);
-            const auto dl = std::clamp(tl[0] - bl[0], -127, 127);
-            const auto dr = std::clamp(tr[0] - br[0], -127, 127);
-            const auto dt = std::clamp(tr[1] - tl[1], -127, 127);
-            const auto db = std::clamp(br[1] - bl[1], -127, 127);
-
             _appendQuad() = {
                 .shadingType = static_cast<u16>(ShadingType::CursorQuad),
-                .position = { static_cast<i16>(left), static_cast<i16>(top) },
-                .size = { static_cast<u16>(std::max(right - left, 1)), static_cast<u16>(std::max(bottom - top, 1)) },
-                .texcoord = {
-                    static_cast<u16>(shearByte(dl) | (shearByte(dr) << 8)),
-                    static_cast<u16>(shearByte(dt) | (shearByte(db) << 8)),
-                },
-                .color = part.background,
+                .position = q.position,
+                .size = q.size,
+                .texcoord = q.shear,
+                .color = q.color,
             };
-
-            bounds.left = std::min(bounds.left, left);
-            bounds.top = std::min(bounds.top, top);
-            bounds.right = std::max(bounds.right, right);
-            bounds.bottom = std::max(bounds.bottom, bottom);
-
-            // Text can only be inverted inside of rectangles. We use the largest axis-aligned rectangle that's fully
-            // inside the quad: Each side is moved inwards by how far the corners on that side are shifted apart.
-            const auto innerLeft = left + std::abs(dl);
-            const auto innerTop = top + std::abs(dt);
-            const auto innerRight = right - std::abs(dr);
-            const auto innerBottom = bottom - std::abs(db);
-
-            if (innerLeft < innerRight && innerTop < innerBottom)
-            {
-                _cursorRects.emplace_back(
-                    i16x2{ static_cast<i16>(innerLeft), static_cast<i16>(innerTop) },
-                    u16x2{ static_cast<u16>(innerRight - innerLeft), static_cast<u16>(innerBottom - innerTop) },
-                    part.background,
-                    part.foreground);
-            }
         }
-
-        _cursorPosition = {
-            std::max(bounds.left, 0),
-            std::max(bounds.top, 0),
-            std::max(bounds.right, 0),
-            std::max(bounds.bottom, 0),
-        };
-    }
-    else if (p.smoothCursor)
-    {
-        // The code above has laid out the cursor inside the cell(s) it's targeting. We now map
-        // that cell box onto the animated box. This way every cursor shape, from the thin
-        // bar to the underscore, animates. (Only the block cursor stretches. See above.)
-        const auto& g = p.smoothCursorRect;
-        const int64_t targetLeft = _cursorPosition.left;
-        const int64_t targetTop = _cursorPosition.top;
-        const int64_t targetWidth = _cursorPosition.right - _cursorPosition.left;
-        const int64_t targetHeight = _cursorPosition.bottom - _cursorPosition.top;
-        const int64_t smoothWidth = g.right - g.left;
-        const int64_t smoothHeight = g.bottom - g.top;
-
-        const auto mapX = [&](int64_t x) { return static_cast<i32>(g.left + (x - targetLeft) * smoothWidth / targetWidth); };
-        const auto mapY = [&](int64_t y) { return static_cast<i32>(g.top + (y - targetTop) * smoothHeight / targetHeight); };
-
-        for (auto& c : _cursorRects)
-        {
-            const auto left = mapX(c.position.x);
-            const auto top = mapY(c.position.y);
-            const auto right = mapX(c.position.x + c.size.x);
-            const auto bottom = mapY(c.position.y + c.size.y);
-            c.position = { static_cast<i16>(left), static_cast<i16>(top) };
-            c.size = { static_cast<u16>(std::max(right - left, 1)), static_cast<u16>(std::max(bottom - top, 1)) };
-        }
-
-        _cursorPosition = {
-            std::max(g.left, 0),
-            std::max(g.top, 0),
-            std::max(g.right, 0),
-            std::max(g.bottom, 0),
-        };
     }
 
     for (const auto& c : _cursorRects)

@@ -3,13 +3,11 @@
 
 #pragma once
 
-#include <array>
-#include <chrono>
-
 #include <dwrite_3.h>
 #include <d3d11_2.h>
 #include <dxgi1_3.h>
 
+#include "SmoothCursor.h"
 #include "common.h"
 
 namespace Microsoft::Console::Render::Atlas
@@ -132,52 +130,13 @@ namespace Microsoft::Console::Render::Atlas
         std::unique_ptr<IBackend> _b;
         RenderingPayload _p;
 
-        // The state of the smooth cursor animation. It's a port of Neovide's cursor renderer:
-        // Each of the 4 corners of the cursor's cell box is pulled towards its destination by two
-        // critically damped springs (one per axis). When the cursor moves, every corner is given
-        // an animation length depending on how well it lines up with the direction of travel:
-        // Leading corners arrive (almost) immediately while trailing ones take the full duration.
-        // This stretches and shears the cursor while it moves and makes it contract again once it arrives.
-        // Without shear all corners use the same length and the cursor just slides.
-        // This is only accessed by the thread that calls StartPaint(), PaintCursor(), etc.
-        struct SmoothCursor
-        {
-            // The offset between a corner's position and its destination in pixel,
-            // which the spring drives towards zero. The velocity is kept when retargeting.
-            struct Spring
-            {
-                f32 position = 0;
-                f32 velocity = 0;
-            };
-            struct Corner
-            {
-                // x, y in pixel.
-                std::array<f32, 2> current{};
-                std::array<f32, 2> previousDestination{};
-                std::array<Spring, 2> spring{};
-                // How long (in seconds) the corner takes to get close to its destination (about 9% are left).
-                f32 animationLength = 0;
-            };
-            // Corners are ordered top-left, top-right, bottom-right, bottom-left.
-            std::array<Corner, 4> corners{};
-            // The destinations of the corners (x, y in pixel).
-            std::array<i32, 8> target{};
-            u16x2 cellSize{};
-            std::chrono::steady_clock::time_point lastStep;
-            // True if corners contains a meaningful value.
-            bool valid = false;
-            // True if the corners haven't reached their target yet.
-            bool active = false;
-            // True if the corners lag behind individually (shear) while the cursor moves.
-            bool stretch = false;
-            // True if PaintCursor() was called during the current frame.
-            bool painted = false;
-            // The area of the smooth cursor that has been drawn during the last frame.
-            // It needs to be repainted during the next frame (empty if nothing was drawn).
-            i32r drawn{};
-        } _smooth;
-        void _stepSmoothCursor() noexcept;
-        void _retargetSmoothCursor(const std::array<i32, 8>& target) noexcept;
+        // The smooth cursor animation (see SmoothCursor.h).
+        SmoothCursor _smooth;
+        // True if PaintCursor() was called during the current frame.
+        bool _smoothPainted = false;
+        // The area of the smooth cursor that has been drawn during the last frame.
+        // It needs to be repainted during the next frame (empty if nothing was drawn).
+        i32r _smoothDrawn{};
 
         struct ApiState
         {

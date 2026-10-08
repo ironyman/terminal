@@ -505,6 +505,21 @@ namespace Microsoft::Console::Render::Atlas
         til::CoordType dirtyBottom = 0;
     };
 
+    // The animated shape of the cursor, see SmoothCursor.h.
+    struct SmoothCursorFrame
+    {
+        // If true, the cursor is drawn in this shape instead of inside RenderingPayload::cursorRect.
+        bool enabled = false;
+        // If true, the cursor is not an axis-aligned box, but a quad whose corners arrive individually.
+        bool shear = false;
+        // The bounding box of the animated cursor (in pixel).
+        i32r rect{};
+        // The corners of the quad (in pixel): top-left, top-right, bottom-right, bottom-left (x, y).
+        std::array<i32, 8> corners{};
+        // The area the quad might touch, including its anti-aliased edges (in pixel).
+        i32r damage{};
+    };
+
     struct RenderingPayload
     {
         //// Parameters which are constant across backends.
@@ -580,15 +595,8 @@ namespace Microsoft::Console::Render::Atlas
         std::array<til::generation_t, 3> colorBitmapGenerations{ 1, 1, 1 };
         // In columns/rows.
         til::rect cursorRect;
-        // If true, the cursor is drawn inside smoothCursorRect (in pixel) instead of inside
-        // cursorRect. smoothCursorRect is the animated, possibly stretched, bounding box of the cursor cell.
-        bool smoothCursor = false;
-        // The bounding box of the animated cursor.
-        i32r smoothCursorRect{};
-        // If true, the cursor is not an axis-aligned box, but a quad whose corners lag behind individually.
-        // smoothCursorCorners contains its corners in pixel: top-left, top-right, bottom-right, bottom-left (x, y).
-        bool smoothCursorStretch = false;
-        std::array<i32, 8> smoothCursorCorners{};
+        // If enabled, the cursor is drawn in the animated shape given here (in pixel) instead of inside cursorRect.
+        SmoothCursorFrame smoothCursor;
         // The viewport/SwapChain area to be presented. In pixel.
         // NOTE:
         //   This cannot use til::rect, because til::rect generally expects positive coordinates only

@@ -35,6 +35,7 @@ SOURCES = \
     BuiltinGlyphs.cpp \
     dwrite_helpers.cpp \
     DWriteTextAnalysis.cpp \
+    SmoothCursor.cpp \
     stb_rect_pack.cpp \
     wic.cpp \
 

@@ -23,6 +23,7 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SmoothCursor.cpp" />
     <ClCompile Include="stb_rect_pack.cpp" />
     <ClCompile Include="wic.cpp" />
   </ItemGroup>
@@ -36,6 +37,7 @@
     <ClInclude Include="dwrite_helpers.h" />
     <ClInclude Include="DWriteTextAnalysis.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="SmoothCursor.h" />
     <ClInclude Include="wic.h" />
   </ItemGroup>
   <ItemGroup>
