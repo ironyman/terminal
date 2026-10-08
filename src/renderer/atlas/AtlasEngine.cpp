@@ -338,6 +338,12 @@ CATCH_RETURN()
 // Returns true if the spring is still moving.
 static bool stepSpring(f32& position, f32& velocity, f32 dt, f32 animationLength) noexcept
 {
+    if (animationLength <= dt)
+    {
+        position = 0;
+        velocity = 0;
+        return false;
+    }
     if (position == 0)
     {
         return false;
@@ -345,10 +351,9 @@ static bool stepSpring(f32& position, f32& velocity, f32 dt, f32 animationLength
 
     // < 1 underdamped, 1 critically damped, > 1 overdamped
     static constexpr f32 zeta = 1.0f;
-    // omega is chosen such that less than 0.5% of the distance is left once animationLength has passed
-    // ((1 + 8) * e^-8 = 0.3% when starting at rest). The caller snaps the cursor onto its destination
-    // at that point, which makes every motion take exactly animationLength.
-    const auto omega = 8.0f / (zeta * animationLength);
+    // omega is chosen like in Neovide: About 9% of the distance is left once animationLength has passed
+    // ((1 + 4) * e^-4 when starting at rest). The spring keeps decaying until it's below 0.01 pixel.
+    const auto omega = 4.0f / (zeta * animationLength);
 
     // The analytical solution of a critically damped harmonic oscillator.
     // a and b are the initial conditions, obtained by setting dt to zero and solving for position and velocity.
@@ -382,19 +387,10 @@ void AtlasEngine::_stepSmoothCursor() noexcept
     for (size_t i = 0; i < 4; ++i)
     {
         auto& corner = _smooth.corners[i];
-        corner.elapsed += dt;
-        const auto arrived = corner.elapsed >= corner.animationLength;
         for (size_t axis = 0; axis < 2; ++axis)
         {
             auto& spring = corner.spring[axis];
-            if (arrived)
-            {
-                spring = {};
-            }
-            else
-            {
-                animating |= stepSpring(spring.position, spring.velocity, dt, corner.animationLength);
-            }
+            animating |= stepSpring(spring.position, spring.velocity, dt, corner.animationLength);
             corner.current[axis] = static_cast<f32>(_smooth.target[i * 2 + axis]) - spring.position;
         }
     }
@@ -443,7 +439,6 @@ void AtlasEngine::_retargetSmoothCursor(const std::array<i32, 8>& target) noexce
         const auto leading = animationLength * std::clamp(1.0f - trailSize, 0.0f, 1.0f);
         const auto trailing = animationLength;
         corner.animationLength = trailing + (leading - trailing) * normalized;
-        corner.elapsed = 0;
 
         // The spring offset is the distance that's left to travel. Its velocity is retained,
         // which is what makes the cursor change course smoothly if it's retargeted midway.
@@ -857,6 +852,11 @@ try
             _smooth.target = target;
             _smooth.lastStep = std::chrono::steady_clock::now();
             _smooth.active = true;
+            // Take the first step right away (with a dt of about zero). Corners that have an animation length
+            // of 0 (the leading ones, if shearing) snap to their destination, while the others stay behind.
+            // Otherwise this frame would still show the cursor at its old position, and the stretched
+            // cursor would only appear in the next frame, which cuts off the start of the trail.
+            _stepSmoothCursor();
         }
 
         std::array<i32, 8> c;
