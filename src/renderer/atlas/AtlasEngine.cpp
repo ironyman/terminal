@@ -145,13 +145,13 @@ try
 
     if (!_p.s->cursor->smooth)
     {
-        _smooth.Reset();
+        _smoothCursor.Reset();
     }
-    if (_smooth.Active())
+    if (_smoothCursor.Active())
     {
-        _smooth.Step();
+        _smoothCursor.Step();
     }
-    if (_smoothDrawn.non_empty())
+    if (_smoothCursorDrawn.non_empty())
     {
         // The smooth cursor was drawn during the previous frame and is now somewhere else (or gone).
         // We need to repaint the area it used to cover. The text and background are redrawn from
@@ -159,12 +159,12 @@ try
         const auto offsetInPx = _p.scrollDeltaY * _p.s->font->cellSize.y;
         for (const auto dy : { 0, offsetInPx })
         {
-            _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothDrawn.left);
-            _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothDrawn.top + dy);
-            _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothDrawn.right);
-            _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothDrawn.bottom + dy);
+            _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothCursorDrawn.left);
+            _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothCursorDrawn.top + dy);
+            _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothCursorDrawn.right);
+            _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothCursorDrawn.bottom + dy);
         }
-        _smoothDrawn = {};
+        _smoothCursorDrawn = {};
     }
 
     // This if condition serves 2 purposes:
@@ -312,11 +312,11 @@ try
 
     // If the cursor wasn't painted (because it's hidden, for instance) it'll reappear
     // at its new position without any animation, instead of animating in from afar.
-    if (!_smoothPainted)
+    if (!_smoothCursorPainted)
     {
-        _smooth.Reset();
+        _smoothCursor.Reset();
     }
-    _smoothPainted = false;
+    _smoothCursorPainted = false;
 
     _api.invalidatedCursorArea = invalidatedAreaNone;
     _api.invalidatedRows = invalidatedRowsNone;
@@ -687,7 +687,7 @@ try
         }
     }
 
-    _smoothPainted = true;
+    _smoothCursorPainted = true;
 
     if (options.isOn && _p.cursorRect && _p.s->cursor->smooth)
     {
@@ -699,15 +699,15 @@ try
         // top-left, top-right, bottom-right, bottom-left
         const std::array<i32, 8> target{ l, t, r, t, r, b, l, b };
 
-        _smooth.MoveTo(target, cellSize, _p.s->cursor->smoothShear != 0, _p.s->cursor->smoothDuration);
-        _p.smoothCursor = _smooth.Frame();
+        _smoothCursor.MoveTo(target, cellSize, _p.s->cursor->smoothShear != 0, _p.s->cursor->smoothDuration);
+        _p.smoothCursor = _smoothCursor.Frame();
 
         // Make sure we also repaint everything the quad might touch, and remember to erase it in the next frame.
-        _smoothDrawn = _p.smoothCursor.damage;
-        _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothDrawn.left);
-        _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothDrawn.top);
-        _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothDrawn.right);
-        _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothDrawn.bottom);
+        _smoothCursorDrawn = _p.smoothCursor.damage;
+        _p.dirtyRectInPx.left = std::min(_p.dirtyRectInPx.left, _smoothCursorDrawn.left);
+        _p.dirtyRectInPx.top = std::min(_p.dirtyRectInPx.top, _smoothCursorDrawn.top);
+        _p.dirtyRectInPx.right = std::max(_p.dirtyRectInPx.right, _smoothCursorDrawn.right);
+        _p.dirtyRectInPx.bottom = std::max(_p.dirtyRectInPx.bottom, _smoothCursorDrawn.bottom);
     }
 
     return S_OK;

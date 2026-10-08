@@ -131,12 +131,12 @@ namespace Microsoft::Console::Render::Atlas
         RenderingPayload _p;
 
         // The smooth cursor animation (see SmoothCursor.h).
-        SmoothCursor _smooth;
+        SmoothCursor _smoothCursor;
         // True if PaintCursor() was called during the current frame.
-        bool _smoothPainted = false;
+        bool _smoothCursorPainted = false;
         // The area of the smooth cursor that has been drawn during the last frame.
         // It needs to be repainted during the next frame (empty if nothing was drawn).
-        i32r _smoothDrawn{};
+        i32r _smoothCursorDrawn{};
 
         struct ApiState
         {
